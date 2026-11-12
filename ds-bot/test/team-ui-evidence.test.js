@@ -42,6 +42,8 @@ test('coordinator private memory needs its own identity and marker too', () => {
     memoryReview: { scope: 'bot', subject, systemMarker: 'You keep the long-term memory of one Bot in DS Bot,', toolCount: 0 },
   }
   assert.equal(teamCallOwner(own, scope), 'coordinator-private-memory-review')
+  assert.equal(teamCallOwner({ ...own, first: `${subject}\n\nMEMORY.md has 0 of 8000 characters`.slice(0, 60) }, scope), 'coordinator-private-memory-review', 'A short subject is followed by the memory context inside the 60-character receipt')
+  assert.equal(teamCallOwner({ ...own, first: `${subject} Different identity`.slice(0, 60) }, scope), 'unexpected-session')
   assert.equal(teamCallOwner({ ...own, session: engineer.sessionId }, scope), 'unexpected-session')
   assert.equal(teamCallOwner({ ...own, memoryReview: { ...own.memoryReview, subject: 'The Bot: Engineer.' } }, scope), 'unexpected-session')
 })

@@ -12,7 +12,7 @@ export function teamCallOwner(call, { room, coordinator, bots }) {
     const scope = memory.scope === 'group' ? 'group chat' : memory.scope === 'bot' ? 'Bot' : ''
     const verified = scope && memory.systemMarker === `You keep the long-term memory of one ${scope} in DS Bot,`
       && memory.toolCount === 0 && call.messages === 1 && Array.isArray(result?.changes)
-      && call.first === memory.subject?.slice(0, 60)
+      && (call.first ?? '').split('\n')[0] === memory.subject?.slice(0, 60)
     if (!verified) return 'unexpected-session'
     // store.js: sessionOfRoom(room) is room.sessionId ?? room.id for the current
     // transcript. Automatic reviewGroup deliberately tags live.id instead.
