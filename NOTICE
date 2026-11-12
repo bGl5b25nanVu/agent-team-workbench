@@ -4,6 +4,27 @@ Copyright 2026 Fei2411 and the DS Bot contributors
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 
 ==============================================================================
+Gongzuo (共作) fork additions
+==============================================================================
+
+Gongzuo is a modified version of DS Bot. The upstream copyright notice,
+license, acknowledgments and third-party notices below are retained.
+Upstream: https://github.com/Fei2411/DS-Bot
+Fork: https://github.com/bGl5b25nanVu/agent-team-workbench
+
+The six Gongzuo character images (coordinator elephant, researcher owl,
+engineer robot, designer fox, tester hedgehog and operator hummingbird) and
+the Gongzuo brand mark are original AI-generated visual material prepared
+for this fork. The images and their copies under docs/design/assets/gongzuo,
+ds-bot/src/host/assets and app/src/start are distributed with this fork under
+the Apache License, Version 2.0, to the extent applicable. They do not grant
+rights in third-party product names or trademarks.
+
+The team workspace interface, creation flow and role presets are fork
+modifications. The software remains based on the DS Bot and DeepSeek
+Harness components described below.
+
+==============================================================================
 Third-party code in this repository
 ==============================================================================
 

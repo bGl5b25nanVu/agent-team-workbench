@@ -1,157 +1,168 @@
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.svg"><img src="docs/images/logo.svg" alt="DS Bot" width="260"></picture></p>
+<p align="center"><img src="docs/design/assets/gongzuo/brand-mark.png" alt="共作 Gongzuo" width="110"></p>
 
-# DS Bot
+# 共作 · Gongzuo
 
-English | [中文](README.zh.md)
+把长期协作的 Agent 组成自己的团队：明确职责、按需分工、核对交付，在同一个工作台中推进目标。
 
-![version](https://img.shields.io/badge/version-v0.3_preview-blue) ![DSH](https://img.shields.io/badge/DSH-0.2.2--rc.1-4D6BFE) ![license](https://img.shields.io/badge/license-Apache_2.0-green)
+共作基于 [Fei2411/DS-Bot](https://github.com/Fei2411/DS-Bot) 和 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)。本次改造采用蓝白界面与灰象协调者，加入六角色团队创建、成员配置、目标总览和待办中心，继续使用原项目的真实 Bot、群聊、Goal、权限及模型机制。
 
-DS Bot is an open-source project built on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH), available as a standalone desktop app or as a DSH plugin. It turns DSH into bots that you create, talk to and work with.
+**当前交付状态：已完成本地源码改造，实现分支为 `feat/team-workbench`。** [自有 fork](https://github.com/bGl5b25nanVu/agent-team-workbench) 已建立，但这份完整实现尚未推送；本文不代表远端已有该分支或已发布共作安装包。以下步骤从拿到并解压的完整源码目录运行，不依赖尚未发布的 release。完整验证结果与交付限制见[首版交付记录](docs/plans/2026-11-12-gongzuo-delivery.md)；浏览器视觉验收状态见[design-qa.md](design-qa.md)。
 
-## Sponsors
+## 这次做了什么
 
-<table>
-<tr>
-<td width="180" align="center"><a href="https://modelgo.ai/?utm_source=dsbot&utm_medium=sponsorship&utm_content=readme&campaign_id=dsbot&ad_group_id=readme"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/sponsors/modelgo-dark.svg"><img src="docs/images/sponsors/modelgo.svg" alt="ModelGo" width="150"></picture></a></td>
-<td>ModelGo is a reliable, high-performance, enterprise-grade AI API aggregation platform. Access leading AI models—including Claude, OpenAI, Gemini, and DeepSeek—with a single API key. Sign up now and get 40% off DeepSeek V4.1 Flash.<br>Exclusive perks for DS-Bot users: get $0.50 in credits when you sign up, earn another $2 after your first API call, and receive up to $10 in bonus credits when you top up! Try it now: <a href="https://modelgo.ai/?utm_source=dsbot&utm_medium=sponsorship&utm_content=readme&campaign_id=dsbot&ad_group_id=readme">ModelGo Official Website</a></td>
-</tr>
-</table>
+- **组建团队**：研发、研究、内容三种模板；角色卡片与成员检查器；可调整姓名、职责、完整指令、探索档位、形象、模型、权限和目录。
+- **六种独立形象**：灰象、猫头鹰、机器人、狐狸、刺猬、蜂鸟。形象是识别线索，不代表额外工具或权限。
+- **保存后再启动**：团队向导新建的成员先处于待命状态，保存配置不自动让六个模型发起欢迎或工作调用；发送目标、直接消息或有效委派后才启动相关成员。
+- **复用和恢复**：可复用非私有成员；保留已有成员设置。创建记录保存实际对象 ID，断线后检查进度，已知失败只继续未完成步骤；不确定结果单独显示。
+- **工作台**：读取实际团队、目标阶段、成员执行状态和任务。“交回待验收”与“已验收”分开显示。
+- **待办中心**：聚合实际问题和审批；只在当前请求允许回答时直接操作，其余打开原会话。
+- **保留成熟能力**：聊天、记忆、模型配置、群设置、本地 CLI、连接器等继续接入原机制。
 
-<h2></h2>
+新增工作台提供简体、繁体中文和英语源文案；日、韩、西、法、德语中的新增文案明确回退英语，已有页面保留原翻译。
 
-![Say one sentence to Chief, and it sets up the bots and the group chat](docs/images/team.png)
+## 你的六位伙伴
 
-## Install
+| 角色 | 形象 | 主要职责与交付 | 默认探索方式 |
+| --- | --- | --- | --- |
+| 总管 / Coordinator | 灰象 | 明确目标、拆分阶段、安排任务、核对证据、汇总交付 | 有限探索 |
+| 研究员 / Researcher | 戴眼镜的猫头鹰 | 查证资料、解释不确定性、提供有来源的方案依据 | 有限探索 |
+| 工程师 / Engineer | 紫色机器人 | 实现功能、集成修改、复现和修复问题、提供检查记录 | 有限探索 |
+| 设计师 / Designer | 珊瑚色狐狸 | 用户流程、交互状态、视觉方案、实现后的体验检查 | 开放探索 |
+| 测试员 / Tester | 琥珀色刺猬 | 独立验证、反例、回归、可复现缺陷和未覆盖条件 | 有限探索 |
+| 运营 / Operator | 青色蜂鸟 | 文档、交付材料、使用说明和已有授权内的发布准备 | 稳健执行 |
 
-**Desktop app (Windows, macOS, Linux)**
+研发模板默认选中六位伙伴；研究模板包含总管、研究员、工程师和测试员；内容模板包含总管、研究员、设计师和运营。当前向导每类角色最多一位，共 2–6 位，必须包含总管。**选中成员表示保存团队配置，实际工作仍按任务需要分派。**
 
-The desktop app brings its own DSH, so you don't need to install DSH first. Download the installer for your system from [Releases](https://github.com/Fei2411/DS-Bot/releases/latest), open it, and set up a model in Settings (it can also copy your existing bot team from DSH).
+三档探索方式写入成员的指令：稳健执行沿既定路线推进；有限探索最多比较两个方案并验证关键未知；开放探索提出三个方向、验证关键假设后收敛。它们是可编辑的行为约定，不是模型温度、硬性调用额度或自动预算控制器。
 
-If your system warns about an unsigned app: on Windows select **More info** → **Run anyway**; on macOS open **System Settings** → **Privacy & Security** and select **Open Anyway**.
+完整公约、六角色指令、任务交接模板与实际 API 说明见[团队运行协议与实现记录](docs/plans/2026-11-12-agent-team-workbench.md)。模板源码在 [team-presets.js](ds-bot/src/shared/team-presets.js)，当前模板版本为 `1.0.0`。
 
-**As a plugin in DSH**
+## 从源码安装与运行
 
-First install DSH and set up at least one model in it. DS Bot uses the models from DSH.
+### 环境
 
-- **DSH Desktop**: In the sidebar, select **Plugins** → **Add plugin**, enter `ds-bot` (in mainland China, set **Registry** to **Mainland China mirror**), then select **Install** and **Enable now**.
-- **DSH Web** (needs Node.js `22.19` or later, and pnpm):
+使用 **Node.js 24.9 或更高版本**与 npm；Web 开发预览还需要 pnpm 11。项目固定使用 DeepSeek Harness `0.2.2-rc.1`，本机已安装的 DSH 版本不同，应使用该版本的独立环境进行核对。首次安装需要下载依赖；桌面端另需 Electron，Linux 桌面源码运行还需准备项目 runtime。
+
+终端进入解压后的源码根目录。下列路径中的 `ds-bot` 是保留的兼容包名；界面显示名为共作 / Gongzuo。
+
+### 桌面应用：运行本地源码
+
+先构建插件及其共享模块：
 
 ```sh
-npx @deepseek-ai/dsh@0.2.2-rc.1 plugin --profile web add ds-bot
-npx @deepseek-ai/dsh@0.2.2-rc.1 web
+npm ci --prefix link
+npm ci --prefix ds-bot
+npm run build --prefix ds-bot
 ```
 
-**Docker (NAS, Linux server)**
+再安装并构建桌面外壳：
 
-See [`docker/README.md`](docker/README.md).
+```sh
+cd app
+npm ci
+npm run build
+```
 
-## Setup
+Linux 在首次启动前运行 `npm run runtime`，下载本项目使用的 Node、Python 和文档运行资源。macOS、Windows 的源码运行可按 [app/README.md](app/README.md#run) 选择准备 runtime。若 Electron 安装未下载运行文件，执行 `node node_modules/electron/install.js`。
 
-I strongly recommend that you set up your other bots and group chats by just talking to a bot.
+```sh
+npm start
+```
 
-### Web search
+Windows 也可在源码根目录先运行 `npm ci --prefix link`，再执行已有的 `start.ps1`：
 
-DS Bot selects its `auto` search provider for the whole profile. If you disable `web-search-auto`, also select another registered search provider in that profile. See [Web search](ds-bot/README.md#web-search) and the [recovery steps](docs/known-issues.md#web-search-fails-everywhere-after-turning-off-web-search-auto).
+```powershell
+.\start.ps1
+```
 
-## Features
+该启动器将本地数据保存在源码旁的独立目录，并维护桌面应用安装的插件副本。更新插件源码后，手动启动流程需要重新构建插件并在 `app/` 再运行 `npm ci`，让应用使用新副本。此处提供源码运行方式，尚未生成或验证本 fork 的各平台成品安装包。
 
-### Bot
+### 已有 DSH：安装本地产生的插件包
 
-You can do all your talking and work with one bot, in one window. You don't need to worry about the context behind it. The bot's details page shows its info, and there you can pick the model and thinking level you want it to use. You can switch models at any time, but I still recommend that you keep one model for a bot for a long time, and switch only when you really need to.
+在完成上面的插件构建后，回到源码根目录执行：
 
-Bots also have memory. A bot remembers what you like and uses it in later work. You can manage its memory on the bot's details page, or just tell the bot.
+```sh
+cd ds-bot
+npm pack
+```
 
-Each bot can have its own working folder and permission preset — just tell the bot when you want to switch folders. While a bot is working, you can send a message to steer it right away, or type `/side` to ask a side question without interrupting its task; it can also draw charts, tables and forms in its replies, or run scheduled tasks. In the sidebar, you can group bots and group chats into collapsible sections by work.
+终端会给出实际生成的 `.tgz` 文件名。在 DSH 的插件管理中选择该本地文件，安装并启用。不要通过 npm 搜索并安装上游同名包来替代本地共作包。
 
-![Bot details: model, memory, usage](docs/images/details.png)
+Web 版也可通过 DSH CLI 将本地 `.tgz` 加入单独的 profile。使用独立的数据目录；下例中的绝对路径应替换为本机实际位置，`plugin add` 接收的是刚生成的文件：
 
-### Main bot
+```sh
+export DSH_HOME="/absolute/path/gongzuo-data"
+npx @deepseek-ai/dsh@0.2.2-rc.1 plugin --profile web add "/absolute/path/to/local-plugin.tgz"
+npx @deepseek-ai/dsh@0.2.2-rc.1 web --no-open
+```
 
-The main bot is your chief. It has very high rights: it manages the other bots and the group chats. The first time you open DS Bot, there is already a main bot called Chief. Talk to it, and it walks you through the setup.
+使用终端打印的本地地址打开工作台。登录地址可能带本地访问凭据，不要把它提交到仓库或贴入公共报告。插件内部保留 `ds-bot`、`bot` 与 `api/bot`，已有数据目录不会因显示名称变化自动迁移。更多配置见 [ds-bot/README.md](ds-bot/README.md)。
 
-In short: have a question? Ask the main bot.
+## 配置真实模型，然后开始协作
 
-### Group chats
+1. 打开 **设置 → 模型**，连接你实际使用的模型服务，填写本机提供商配置与密钥。工作台只列出运行环境真实提供的模型引用，不预填不存在的模型。
+2. 打开 **我的团队**，填写团队名称、选择模板，逐个检查成员。可为成员分别选择运行来源，也可选“稍后配置”。
+3. 在“更多设置”中查看完整指令、探索方式、实际权限和工作目录。研究员默认优先使用运行环境的只读预设；其余角色优先使用工作区写入预设。不会自动选全访问，缺少有效权限预设时需要先解决运行环境配置。
+4. 创建完成后，模型未配置的协调者会显示配置入口。准备好后设定第一个 Goal，描述期望产物与验收条件。
+5. 在工作台查看阶段和待验收任务，在待办中心回答问题或处理当前真实审批。需要中断正在执行的任务时使用“停止当前工作”；“暂停目标”只暂停目标推进。
 
-DS Bot has group chats. A group chat is a great way to get several bots to work together, but it clearly costs more. So DS Bot does this: every group chat has an admin. The admin answers your messages by default and calls in the other bots for you. You can also @ a bot directly, and it answers you directly. To give the bots another chat as context, use + → Reference a chat in the message box.
+本地 CLI 成员使用该 CLI 自己的安装、登录、模型与工具。共作的共享连接器不会因此自动传入 CLI。模型服务的调用费用、配额和可用性由你实际选择的提供商决定。
 
-Any bot can hand work to other bots with @, and those bots do the work on their own and post the results back to the group. A group chat has its own memory and working folder, invisible to bots outside the group. For larger work, a group chat can run a Goal: the admin aligns with you on what "done" means, splits the work into stages across members, and checks each stage before moving on.
+## 已实现的约束与当前边界
 
-![Group chat: the admin, Chief, hands the work to Writer and Coder](docs/images/group.png)
+| 项目 | 当前实现 |
+| --- | --- |
+| 真实操作权限 | 读取并验证 DSH 权限预设，群默认继承成员权限；角色名称不会授予 Main Bot 权限 |
+| 团队创建 | 持久化操作记录、同 ID 请求去重、分步恢复、待命成员和不确定结果展示 |
+| 角色协作 | 团队公约、职责、交接格式、有限探索与证据要求写入 instructions 和群 notice |
+| 阶段验收 | 复用现有 Goal；显示真实状态和证据，独立检查按角色约定执行 |
+| 硬性独立验收门禁 | **未实现**：服务端不强制另一位指定审查者批准，不会仅因证据文本存在就实际执行测试 |
+| 硬预算、文件锁、不可修改的角色规则 | **未实现**：没有自动费用拦截、并发文件锁或指令防修改机制 |
 
-### Private bot
+角色提示词不能代替平台权限或系统隔离，也不能保证模型遵守每项约定。批量创建的“保存不启动”只针对这条新路径创建的成员；已有成员和原单 Bot 入口保留原有行为。创建结果不确定时先核对记录，不将请求去重宣传为外部业务副作用的绝对 exactly-once。
 
-If you have private work that you only want to discuss with one bot, turn on Private in its settings and give it a separate working folder. Other bots cannot read its folder, memory or chat history, and sending messages to other bots or writing files outside its folder requires your approval. Even if you delete it, its folder and records stay protected until you release them in Settings.
+## 开发预览与验证
 
-Note that a private bot cannot be a main bot or join group chats. This boundary only isolates it from other bots in your team, not as an OS sandbox: if you give it shell or network access, its commands can still read and write system files or reach the network, and its model provider still receives the conversation.
+以下预览使用脚本化 mock 模型，不需要真实密钥，也不能用来证明真实模型的协作质量。从源码根目录开始运行：
 
-### Local agents
+```sh
+npm ci --prefix link
+cd ds-bot
+npm ci
+npm run harness
+npm run build
+npm run dev
+```
 
-Coding-agent CLIs you already use on your computer (Claude Code, Codex CLI, Cursor CLI, Devin CLI, OpenCode, Gemini CLI and others) can be connected as bots directly. Pick Local agent when creating a bot (or switch in the bot's settings), and it will use the CLI's own sign-in, plan and models while working like any other bot in private chats, group chats, handoffs and memory.
+预览默认使用独立的 4173 端口及测试数据目录。DSH 的本机登录入口写在源码根目录的 `.dsh-test-gongzuo-preview/web.log`；打开其中的登录地址进入预览，直接打开没有登录信息的服务地址会返回 401。登录地址包含临时访问凭据，仅用于本机预览。服务保持运行直到终止进程，停止时会停止所启动的测试服务。
 
-There are a few limits to keep in mind: a local agent uses the CLI's own tools and context, so shared capabilities and connectors in DS Bot are not passed to it, and switching how a bot runs starts a fresh conversation part; custom CLIs without HTTP MCP support do not get team tools such as creating bots or handing off work. Also, Cursor CLI saves the last selected model as its own global default (`~/.cursor`), so if you pick a specific model for a Cursor bot in DS Bot, other Cursor bots on the default model and Cursor in your terminal will switch to it too — keep "CLI default" if you don't want to change your global default (sign in to Cursor first so the model list loads).
+项目检查在 `ds-bot/` 执行：
 
-### Browser
+```sh
+npm test
+node scripts/build-client.mjs --check
+npm run lint
+```
 
-Each bot has its own isolated browser with separate sign-ins, and can import cookies from a file or from your local browsers. Turn on a browser plugin in Settings → Browser to let bots open and operate web pages on their own; posting, uploading, downloading and deleting need your approval, and sign-in, captchas or payments hand back to you with a card so you can take over and hand back at any time.
+团队专项用例覆盖创建去重、部分失败与恢复、延迟启动、复用成员不改写、权限预检、任务状态、语言文案及关键界面动作。修改服务端还应运行 [CONTRIBUTING.md](CONTRIBUTING.md#test-a-change) 中的隔离 smoke；桌面修改在 `app/` 运行 `npm test`，并按实际平台验证源码启动。mock、单元测试、真实浏览器验证与真实提供商验证应分别记录。
 
-The browser feature is available in the desktop app and DSH Desktop only (not in DSH Web), and only the desktop app keeps browser sign-ins after you quit and supports cookie import. On Windows, new Chrome and Edge cookies encrypted with v20 cannot be read directly — export them to a file with a browser extension first.
+`ds-bot/client.js` 是生成文件；修改 `src/client/` 后运行构建，不手动编辑生成代码。
 
-### Computer use
+## 目录与来源
 
-Turn on Settings → Computer use to let bots operate apps on your computer as far as you allow. You can set a level (view only, background, or foreground) and allowed apps for each bot, with a top bar showing when a bot is working so you can pause or take over at any time; apps like system settings and password managers are never given to a bot.
+| 路径 | 内容 |
+| --- | --- |
+| `ds-bot/src/client/team-*.js` | 团队向导、工作台、待办、样式和文案 |
+| `ds-bot/src/shared/team-presets.js` | 团队公约、六角色职责、三档探索和三种模板 |
+| `ds-bot/src/host/team-creation.js` | 创建预检、持久记录、去重、恢复和激活 |
+| `ds-bot/src/host/assets/` | 由应用受限路由提供的角色与品牌图片 |
+| `app/` | Electron 桌面外壳、首次启动和打包工具 |
+| `docs/plans/2026-11-12-agent-team-workbench.md` | 设计决策、角色全文、运行协议和实现边界 |
 
-All bots share your desktop, so only one bot can use a given app or the foreground mouse at a time. On Windows, Chrome and Electron apps often ignore background input and need "foreground", and apps running as administrator cannot be controlled; macOS requires 14 or later with Accessibility and Screen Recording permissions; Linux supports X11, with limited Wayland support.
+上游完整介绍保存在 [README.upstream.md](README.upstream.md) 与 [README.upstream.zh.md](README.upstream.zh.md)。其中的上游下载、赞助和版本说明属于原项目；本 fork 的安装与交付状态以本页为准。
 
-### IM
+## 许可证与致谢
 
-In Settings → IM, you can link a bot or group chat to WeChat, Feishu, DingTalk, WeCom, QQ, Telegram, Discord or Slack. Once paired, you can talk to your bots, @ them in groups, and answer question and approval cards directly from your chat app without a public IP or open port on your computer.
+继续使用 [Apache License 2.0](LICENSE)，保留 Fei2411 与 DS-Bot contributors 的版权和 [NOTICE](NOTICE)。感谢 DS-Bot 的 Bot、群聊、Goal、记忆与应用基础，以及 DeepSeek Harness 的会话、模型、工具和插件机制。
 
-Messages only flow while your computer is awake and DS Bot is running. WeChat only supports private chat with the QR-paired account, not group chats; WeChat and QQ only allow replies within a platform time window after you send a message, and sending another message resumes it. WeChat, QQ and DingTalk do not have card buttons, so reply with the option number instead; for security, secret cards cannot be filled in from chat apps.
-
-### Connectors and capabilities
-
-In Settings → Connectors, you can sign in to GitHub, Gmail, QQ Mail, 163 and other mailboxes, and remote MCP servers, or import existing configs from Claude Desktop, Cursor and VS Code. Credentials stay in DS Bot's secrets so bots never see the raw values, and emails written by a bot wait for your confirmation by default.
-
-In Settings → Capabilities, you can manage shared MCP servers, skills and packs for the team and enable them per bot; local commands added by a bot need your approval before they run.
-
-### Office files
-
-Bots can create, check and edit Word (`.docx`), PowerPoint (`.pptx`) and Excel (`.xlsx`) documents directly, and render pages to images to check layout. The desktop app includes the full runtime out of the box; DSH Web does not bundle this runtime, so it can only check and edit existing documents, while creating files from scratch and rendering pages require the desktop app or DSH Desktop.
-
-### Usage
-
-In **Settings** → **Usage**, you can see token usage by time, by bot and by model.
-
-![Usage page](docs/images/usage.png)
-
-## Data
-
-All data stays on your own computer: in the folder you chose on first start in the desktop app (`~/.ds-bot` by default), or in `bot/` and `sessions/` in the DSH home folder (`~/.dsh` by default) for the plugin. Uninstalling the app or the plugin does not delete this data.
-
-## Development
-
-The plugin source is in [`ds-bot/`](ds-bot/). For options and internals, see [`ds-bot/README.md`](ds-bot/README.md). For development, tests and how the team works, see [CONTRIBUTING.md](CONTRIBUTING.md). For changes between versions, see [CHANGELOG.md](CHANGELOG.md).
-
-## Acknowledgments
-
-- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): DS Bot is built on the DSH plugin system. Every bot works in DSH sessions and uses the DSH tools and models.
-- [esbuild](https://esbuild.github.io/): bundles the plugin's interface code.
-- Thanks to these projects for the ideas they published. DS Bot learned from their designs and does not contain their code:
-  - [AgentMemoryRepo](https://github.com/AgentMemoryRepo/agentmemoryrepo): the Markdown format of Bot memory.
-  - [OpenAI Codex](https://github.com/openai/codex): checkpoints that keep the user's messages next to the summary, and message anchors for chat search.
-  - [OpenMausBot](https://github.com/milind-soni/OpenMausBot): group chat rounds and @mention relays.
-  - [Hermes Agent](https://github.com/NousResearch/hermes-agent) and [Hermes Bot Mode](https://github.com/NousResearch/Hermes-Bot-Mode): one session per member per group chat, and handoffs that carry the earlier user messages.
-  - [OpenCode](https://github.com/sst/opencode), [goose](https://github.com/block/goose), [pi](https://github.com/badlogic/pi-mono) and [Gemini CLI](https://github.com/google-gemini/gemini-cli): when to condense a long chat, and what a handoff note holds.
-  - [obelisk](https://github.com/tommy0103/obelisk): chat search with a SQLite full-text index.
-- Everyone who tries DS Bot, asks questions and reports bugs.
-
-## License
-
-[Apache License 2.0](LICENSE). Provided "as is", without any warranty. Third-party code and its license are listed in [NOTICE](NOTICE).
-
-## Disclaimer
-
-DS Bot is an independent community project. **It is not an official DeepSeek product**, and it is not affiliated with, endorsed by or sponsored by DeepSeek. "DeepSeek", "DeepSeek Harness" and the other names are trademarks of their owners. They are used here only to say what this plugin works with.
-
-Bots use your own model quota, and they read and write files and run commands when you ask them to. Check important actions yourself.
+本次六角色与品牌图片为针对共作生成并整理的原创 AI 图像，随本 fork 在 Apache 2.0 下提供，详见 NOTICE。共作是独立社区改造，不是 DeepSeek 官方产品；第三方产品名称与商标归其各自权利人。
