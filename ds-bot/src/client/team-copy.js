@@ -45,6 +45,7 @@ export const TEAM_ZH = {
   'Reproducible defects, independent checks, and unverified conditions.': '独立验证，报告可复现缺陷与未覆盖的条件。',
   'Clear documentation, delivery assets, and authorized publishing materials.': '整理使用文档、交付资源与已获授权的发布材料。',
   'Member settings': '成员设置',
+  Role: '角色标签',
   'Change appearance': '更换形象',
   'Avatar library': '头像库',
   'Select this role to include it in your team.': '勾选此角色即可加入团队。',

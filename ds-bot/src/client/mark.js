@@ -82,7 +82,7 @@ export function BotMark({ bot, look: given, size = 36, state = 'idle', live = fa
     onClick: pokeable ? () => setPoked(true) : undefined,
     onAnimationEnd: poked ? (event) => { if (/^bt-poke/.test(event.animationName)) setPoked(false) } : undefined,
   }
-  if (image) return h('span', common, h('img', { className: 'bt-mark-img', style: image === asset ? { borderRadius: 0, objectFit: 'contain' } : undefined, src: image, alt: '', draggable: false, onError: () => setBroken(image) }))
+  if (image) return h('span', common, h('img', { className: 'bt-mark-img', style: image === asset ? { borderRadius: 0, objectFit: 'contain', boxShadow: 'none' } : undefined, src: image, alt: '', draggable: false, onError: () => setBroken(image) }))
   const box = shapeOf(displayShape).size
   return h('span', common, h('svg', { viewBox: `0 0 ${box} ${box}`, dangerouslySetInnerHTML: { __html: characterMarkup(displayShape, look.color).replaceAll(MASK_ID, maskId.current) } }))
 }

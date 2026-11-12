@@ -106,6 +106,46 @@ const SUMMARY_PROMPTS = [['handoff', 'You are now writing a handoff note'], ['ch
 const summaryKind = value => SUMMARY_PROMPTS.find(([, prompt]) => value.trimStart().startsWith(prompt))?.[0]
 const textBlocks = content => (typeof content === 'string' ? [content]
   : Array.isArray(content) ? content.filter(block => block.type === 'text').map(block => block.text) : [])
+// The reply contains every option as context. Only answers[].selected records
+// the user's choice; searching the whole JSON would always find the first option.
+function questionReplyOf(messages) {
+  const latest = [...(messages ?? [])].reverse().find(message => message.role === 'user')
+  for (const text of textBlocks(latest?.content)) {
+    let reply
+    try { reply = JSON.parse(text) } catch { continue }
+    if (reply?.kind !== 'answer_to_pending_question' || reply.tool !== 'ask_user') continue
+    const questions = Array.isArray(reply.questions) ? reply.questions : []
+    return {
+      callId: reply.callId,
+      answers: (Array.isArray(reply.answers) ? reply.answers : []).flatMap(answer => {
+        const question = questions.find(item => item.id === answer.id)
+        if (!question) return []
+        const labels = new Set((question.options ?? []).map(option => option?.label))
+        return [{
+          id: answer.id, question: question.question,
+          selected: (Array.isArray(answer.selected) ? answer.selected : []).filter(label => typeof label === 'string' && labels.has(label)),
+          custom: typeof answer.custom === 'string' ? answer.custom.trim() : '',
+        }]
+      }),
+    }
+  }
+  return undefined
+}
+
+function requestEvidence(body) {
+  const system = systemText(body.system) + '\n' + (body.messages ?? []).filter(message => message.role === 'system').map(message => textOf(message.content)).join('\n')
+  const marker = /^You keep the long-term memory of one (group chat|Bot) in DS Bot,/m.exec(system)
+  const first = textOf(body.messages?.find(message => message.role === 'user')?.content)
+  const answer = questionReplyOf(body.messages)
+  return {
+    ...(marker ? { memoryReview: {
+      scope: marker[1] === 'group chat' ? 'group' : 'bot', systemMarker: marker[0],
+      subject: first.split('\n')[0], toolCount: body.tools?.length ?? 0,
+    } } : {}),
+    ...(answer ? { questionReply: { callId: answer.callId, answers: answer.answers.map(({ custom, ...entry }) => ({ ...entry, customPresent: custom !== '' })) } } : {}),
+  }
+}
+
 function isSummary(body) {
   const last = textBlocks(body.messages?.at(-1)?.content).at(-1)
   return last === undefined ? undefined : summaryKind(last)
@@ -309,7 +349,10 @@ function decide(body) {
   if (/^报错$/.test(userText) || /^(?:\[Message from [^\]]*\]\n报错\n?)+$/.test(userText)) return 'auth'
   const lastCall = [...messages].reverse().find(m => m.role === 'assistant' && Array.isArray(m.content) && m.content.some(b => b.type === 'tool_use'))
   const lastAsk = lastCall?.content.find(b => b.type === 'tool_use' && b.name === 'ask_user')
-  const answeredAsk = lastAsk && (lastAsk.input?.options ?? []).map(option => option?.label ?? option).find(label => userText.includes(label))
+  const pendingReply = questionReplyOf(messages)
+  const answeredAsk = pendingReply
+    ? pendingReply.answers.flatMap(answer => [...answer.selected, ...(answer.custom ? [answer.custom] : [])]).join('、')
+    : lastAsk && (lastAsk.input?.options ?? []).map(option => option?.label ?? option).find(label => userText.includes(label))
   if (isRelay && tools.has('group_relay')) return [tool('group_relay', {})]
   if (answeredAsk && !userText.trim().startsWith('[')) {
     return [text(`好，就从「${answeredAsk}」开始。`), text('我先把要点理一下，稍后给你一个方案。')]
@@ -760,7 +803,7 @@ const server = createServer((req, res) => {
     // Hashes of the system prompt and tools show whether two Sessions share a cacheable prefix.
     const digest = value => createHash('sha256').update(JSON.stringify(value ?? null)).digest('hex').slice(0, 12)
     const watch = WATCH ? { watchHit: JSON.stringify([body.system, body.tools, body.messages]).includes(WATCH) } : {}
-    appendFileSync(LOG, JSON.stringify({ t: new Date().toISOString(), id, tokens, images, session: req.headers['x-deepseek-harness-session-id'] ?? null, ...watch, ...LOG_TOOLS ? { toolNames: (body.tools ?? []).map(entry => entry.name ?? entry.type) } : {}, ...search ? { nativeSearch: { model: body.model, tools: body.tools, auth: [req.headers['x-api-key'] ? 'x-api-key' : '', req.headers.authorization ? 'bearer' : ''].filter(Boolean) } } : {}, system: digest(body.system), tools: digest(body.tools), messages: body.messages?.length ?? 0, first: textOf(body.messages?.[0]?.content).slice(0, 60), last: textOf(body.messages?.at(-1)?.content).slice(0, LOG_CHARS), out: out.map(block => (block.type === 'text' && block.text.length > 200 ? { ...block, text: `${block.text.slice(0, 200)}…(${block.text.length})` } : block)) }) + '\n')
+    appendFileSync(LOG, JSON.stringify({ t: new Date().toISOString(), id, tokens, images, session: req.headers['x-deepseek-harness-session-id'] ?? null, ...watch, ...requestEvidence(body), ...LOG_TOOLS ? { toolNames: (body.tools ?? []).map(entry => entry.name ?? entry.type) } : {}, ...search ? { nativeSearch: { model: body.model, tools: body.tools, auth: [req.headers['x-api-key'] ? 'x-api-key' : '', req.headers.authorization ? 'bearer' : ''].filter(Boolean) } } : {}, system: digest(body.system), tools: digest(body.tools), messages: body.messages?.length ?? 0, first: textOf(body.messages?.[0]?.content).slice(0, 60), last: textOf(body.messages?.at(-1)?.content).slice(0, LOG_CHARS), out: out.map(block => (block.type === 'text' && block.text.length > 200 ? { ...block, text: `${block.text.slice(0, 200)}…(${block.text.length})` } : block)) }) + '\n')
     if (search) {
       setTimeout(() => {
         res.writeHead(200, { 'content-type': 'application/json' })

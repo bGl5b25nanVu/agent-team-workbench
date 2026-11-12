@@ -11,6 +11,7 @@ export function install(rt) {
     ctx.effect(() => ctx.connection.fetch.register({
       path: `/api/bot-art/${id}.png`,
       methods: ['GET', 'HEAD'],
+      requestBody: 'buffered',
       fetch: async request => {
         try {
           if (!cached) {

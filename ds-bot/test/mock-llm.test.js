@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -9,11 +9,11 @@ import { fileURLToPath } from 'node:url'
 const MOCK = fileURLToPath(new URL('../dev/mock-llm.mjs', import.meta.url))
 
 // One Anthropic-shaped request, its SSE reply folded into { text, tools }.
-async function call(url, messages, names = ['list_bots']) {
+async function call(url, messages, names = ['list_bots'], { system, sessionId } = {}) {
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ model: 'mock', stream: true, tools: names.map(name => ({ name })), messages }),
+    headers: { 'content-type': 'application/json', ...(sessionId ? { 'x-deepseek-harness-session-id': sessionId } : {}) },
+    body: JSON.stringify({ model: 'mock', stream: true, tools: names.map(name => ({ name })), messages, system }),
   })
   assert.equal(res.status, 200)
   const events = (await res.text()).split('\n\n')
@@ -45,7 +45,10 @@ async function startMock(t) {
   return new Promise((resolve, reject) => {
     mock.stdout.on('data', chunk => {
       const found = /127\.0\.0\.1:(\d+)\/v1/.exec(String(chunk))
-      if (found !== null) resolve(`http://127.0.0.1:${found[1]}/v1/messages`)
+      if (found !== null) resolve({
+        url: `http://127.0.0.1:${found[1]}/v1/messages`,
+        readLog: () => readFileSync(join(home, 'mock.jsonl'), 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)),
+      })
     })
     mock.once('exit', code => reject(new Error(`mock-llm exited ${code}`)))
   })
@@ -54,7 +57,7 @@ async function startMock(t) {
 // "长任务 N [K]" adds about K×1000 characters per step, defaulting to 4. A missing K once
 // parsed as NaN, so every step after the opener silently sent no text block.
 test('长任务 writes text on every step when the step size is left out', async (t) => {
-  const url = await startMock(t)
+  const { url } = await startMock(t)
 
   const messages = [{ role: 'user', content: '长任务 3' }]
   let out = await call(url, messages)
@@ -81,7 +84,7 @@ test('长任务 writes text on every step when the step size is left out', async
 // A Bot hands work on when a Bot message says 转告, and answers 慢慢做 N after N seconds,
 // so the bench can watch a Bot wait for work it handed on.
 test('a Bot message hands work on with 转告 and takes its time with 慢慢做', async (t) => {
-  const url = await startMock(t)
+  const { url } = await startMock(t)
   const tools = ['list_bots', 'message_bot']
   const handed = await call(url, [{ role: 'user', content: '[Message from Chief]\n转告 Coder: 慢慢做 1' }], tools)
   assert.deepEqual(handed.tools.map(used => used.name), ['message_bot'])
@@ -91,4 +94,62 @@ test('a Bot message hands work on with 转告 and takes its time with 慢慢做'
   assert.equal(slow.text, '给 Writer 的回复：做完了，用了 1 秒。')
   const back = await call(url, [{ role: 'user', content: '[Reply from Coder · for the work Chief asked you for; your answer goes to Chief once everything you handed on is back]\n做完了' }], tools)
   assert.deepEqual([back.text, back.tools], ['Coder 交回了，我把结果交给 Chief。', []])
+})
+
+test('a structured question reply chooses its selected answer, not the first contextual option', async (t) => {
+  const { url, readLog } = await startMock(t)
+  const options = ['写正文', '改标题', '先停'].map(label => ({ label }))
+  const reply = {
+    kind: 'answer_to_pending_question', tool: 'ask_user', callId: 'ask-42',
+    questions: [{ id: 'question-42', question: '接下来先做哪个？', options }],
+    answers: [{ id: 'question-42', selected: ['改标题'] }],
+  }
+  const messages = [
+    { role: 'user', content: '卡片 0' },
+    { role: 'assistant', content: [{ type: 'tool_use', id: 'ask-42', name: 'ask_user', input: { question: '接下来先做哪个？', options } }] },
+    { role: 'user', content: [{ type: 'text', text: JSON.stringify(reply) }] },
+  ]
+  const out = await call(url, messages, ['ask_user'], { sessionId: 'coordinator-private' })
+  assert.match(out.text, /^好，就从「改标题」开始。/)
+  assert.doesNotMatch(out.text, /从「写正文」/)
+  const receipt = readLog().at(-1)
+  assert.equal(receipt.session, 'coordinator-private')
+  assert.deepEqual(receipt.questionReply, {
+    callId: 'ask-42', answers: [{ id: 'question-42', question: '接下来先做哪个？', selected: ['改标题'], customPresent: false }],
+  })
+})
+
+test('structured question replies preserve multiple selections and do not guess from contextual options', async (t) => {
+  const { url, readLog } = await startMock(t)
+  const question = { id: 'q-multi', question: '选择事项', options: [{ label: '第一项' }, { label: '第二项' }, { label: '第三项' }] }
+  for (const [answer, expected] of [
+    [{ selected: ['第二项', '第三项'] }, '第二项、第三项'],
+    [{ selected: [], custom: '先核对数据' }, '先核对数据'],
+  ]) {
+    const reply = { kind: 'answer_to_pending_question', tool: 'ask_user', callId: 'ask-multi', questions: [question], answers: [{ id: question.id, ...answer }] }
+    const out = await call(url, [{ role: 'user', content: JSON.stringify(reply) }], ['ask_user'])
+    assert.ok(out.text.startsWith(`好，就从「${expected}」开始。`))
+    assert.deepEqual(readLog().at(-1).questionReply.answers[0].selected, answer.selected)
+    assert.equal(readLog().at(-1).questionReply.answers[0].customPresent, Boolean(answer.custom))
+  }
+  const empty = { kind: 'answer_to_pending_question', tool: 'ask_user', callId: 'ask-empty', questions: [question], answers: [{ id: question.id, selected: ['not-an-option'] }] }
+  const out = await call(url, [{ role: 'user', content: JSON.stringify(empty) }], ['ask_user'])
+  assert.doesNotMatch(out.text, /好，就从「/)
+  assert.deepEqual(readLog().at(-1).questionReply.answers[0].selected, [])
+})
+
+test('memory receipts require the real system marker and preserve the actual tagged Session', async (t) => {
+  const { url, readLog } = await startMock(t)
+  const system = 'You keep the long-term memory of one group chat in DS Bot, an app where a team of AI Bots works for the user.'
+  const subject = 'The group chat: "UI team", with the user and Coordinator (admin), Engineer.'
+  const request = `${subject}\n\nMEMORY.md has 0 of 8000 characters (group) and 0 of 8000 (team).\nIts memory now (group: shared by the members of this group; team: shared by every Bot):\n(none yet)\n\nNew in the group chat "UI team", oldest first:\nUser: Prepare a plan.`
+  await call(url, [{ role: 'user', content: request }], [], { system, sessionId: 'actual-room-id' })
+  const receipt = readLog().at(-1)
+  assert.equal(receipt.session, 'actual-room-id')
+  assert.deepEqual(receipt.memoryReview, {
+    scope: 'group', systemMarker: 'You keep the long-term memory of one group chat in DS Bot,', subject, toolCount: 0,
+  })
+  assert.deepEqual(JSON.parse(receipt.out[0].text), { changes: [] })
+  await call(url, [{ role: 'user', content: `${system}\n${request}` }], [], { sessionId: 'actual-room-id' })
+  assert.equal(readLog().at(-1).memoryReview, undefined, 'A copied user-text marker must not masquerade as a memory system request')
 })
