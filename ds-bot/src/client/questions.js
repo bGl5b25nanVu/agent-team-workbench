@@ -31,6 +31,7 @@ export function useOptionKeys(count, onPick, ownRef) {
     optionKeyCards.set(value => value + 1)
     const onKey = (event) => {
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.key.length !== 1) return
+      if (document.body?.dataset.gwWorkspace === 'true') return
       if (isTypingTarget(event.target) || isTypingTarget(document.activeElement)) return
       if (document.querySelector('[role="dialog"], [aria-modal="true"]') !== null) return
       if (optionKeyCards.getSnapshot() !== 1) return

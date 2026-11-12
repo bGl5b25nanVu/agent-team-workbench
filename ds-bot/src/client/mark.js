@@ -1,5 +1,5 @@
 import { createElement as h, useEffect, useRef, useState } from 'react'
-import { fnv1a, lookOf, shapeId, shapeOf, MASK_ID, nextMarkSerial, characterMarkup } from './characters.js'
+import { fnv1a, lookOf, shapeId, shapeOf, FALLBACK_SHAPE, MASK_ID, nextMarkSerial, characterMarkup } from './characters.js'
 import { reducedMotion } from './motion.js'
 import { t } from './i18n.js'
 
@@ -61,12 +61,15 @@ export function BotMark({ bot, look: given, size = 36, state = 'idle', live = fa
   const [poked, setPoked] = useState(false)
   // A photo that does not load shows the character instead; a new photo is tried again.
   const [broken, setBroken] = useState('')
-  const image = look.image && look.image !== broken ? look.image : undefined
+  const asset = shapeOf(look.shape).image
+  const candidate = look.image ?? asset
+  const image = candidate && candidate !== broken ? candidate : undefined
+  const displayShape = asset && candidate === broken ? FALLBACK_SHAPE : look.shape
   useGaze(ref, gaze)
   const common = {
     ref,
     className: poked ? 'bt-mark bt-mark-poke' : 'bt-mark',
-    'data-shape': image ? 'image' : shapeId(look.shape),
+    'data-shape': image ? 'image' : shapeId(displayShape),
     'data-state': STATES.includes(state) ? state : 'idle',
     'data-live': live ? '' : undefined,
     'data-fidget': live ? FIDGETS[fnv1a(`${bot?.id ?? ''}:fidget`) % FIDGETS.length] : undefined,
@@ -79,9 +82,9 @@ export function BotMark({ bot, look: given, size = 36, state = 'idle', live = fa
     onClick: pokeable ? () => setPoked(true) : undefined,
     onAnimationEnd: poked ? (event) => { if (/^bt-poke/.test(event.animationName)) setPoked(false) } : undefined,
   }
-  if (image) return h('span', common, h('img', { className: 'bt-mark-img', src: image, alt: '', draggable: false, onError: () => setBroken(image) }))
-  const box = shapeOf(look.shape).size
-  return h('span', common, h('svg', { viewBox: `0 0 ${box} ${box}`, dangerouslySetInnerHTML: { __html: characterMarkup(look.shape, look.color).replaceAll(MASK_ID, maskId.current) } }))
+  if (image) return h('span', common, h('img', { className: 'bt-mark-img', style: image === asset ? { borderRadius: 0, objectFit: 'contain' } : undefined, src: image, alt: '', draggable: false, onError: () => setBroken(image) }))
+  const box = shapeOf(displayShape).size
+  return h('span', common, h('svg', { viewBox: `0 0 ${box} ${box}`, dangerouslySetInnerHTML: { __html: characterMarkup(displayShape, look.color).replaceAll(MASK_ID, maskId.current) } }))
 }
 
 function StarIcon({ size = 8 }) {

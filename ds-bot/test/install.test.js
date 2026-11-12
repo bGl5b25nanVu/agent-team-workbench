@@ -14,7 +14,7 @@ function start(state, { config = {}, services } = {}) {
   let route
   const register = ctx.connection.fetch.register
   ctx.connection.fetch.register = (options) => {
-    route = options
+    if (options.path === '/api/bot') route = options
     return register(options)
   }
   rt = createRuntime(ctx, { home, ...config })
@@ -51,6 +51,20 @@ test('apply registers listeners and effects in a fixed order', (t) => {
     'on tools/result',
     'on session/event',
     'effect ds-bot: lost hand-offs',
+    'effect gongzuo: artwork team-elephant',
+    'route GET,HEAD /api/bot-art/team-elephant.png',
+    'effect gongzuo: artwork team-owl',
+    'route GET,HEAD /api/bot-art/team-owl.png',
+    'effect gongzuo: artwork team-robot',
+    'route GET,HEAD /api/bot-art/team-robot.png',
+    'effect gongzuo: artwork team-fox',
+    'route GET,HEAD /api/bot-art/team-fox.png',
+    'effect gongzuo: artwork team-hedgehog',
+    'route GET,HEAD /api/bot-art/team-hedgehog.png',
+    'effect gongzuo: artwork team-hummingbird',
+    'route GET,HEAD /api/bot-art/team-hummingbird.png',
+    'effect gongzuo: artwork brand',
+    'route GET,HEAD /api/bot-art/brand.png',
     'on tools/execute',
     'effect ds-bot: identity section',
     'prompt bot-identity 640',

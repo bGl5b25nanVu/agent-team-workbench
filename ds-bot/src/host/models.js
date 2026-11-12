@@ -336,19 +336,26 @@ export function install(rt) {
   const sameSelection = (a, b) => a.provider === b.provider && a.model === b.model && a.reasoningEffort === b.reasoningEffort
 
   // `force` re-selects even when the record says it is applied: the composer's own
-  // model picker can move the Session without telling this plugin.
-  async function applyModel(bot, { force = false } = {}) {
-    const ref = await desiredModel(bot)
+  // model picker can move the Session without telling this plugin. New team work
+  // uses `strict` and its actual Session so an unavailable route cannot fall back.
+  async function applyModel(bot, { force = false, strict = false, sessionId } = {}) {
+    const ref = strict ? await resolveModel(bot.model) : await desiredModel(bot)
     if (ref === undefined) return ref
     const effort = await desiredEffort(bot, ref)
     const ownChanged = force || bot.appliedModel !== ref || (bot.appliedEffort ?? undefined) !== effort
     const route = { ...splitRef(ref), ...(effort === undefined ? {} : { reasoningEffort: effort }) }
+    if (sessionId !== undefined) {
+      await selectSessionModel(sessionId, route)
+      return ref
+    }
     if (ownChanged) await selectSessionModel(rt.chatOf(bot.id), route)
     for (const sessionId of rt.groupSessionsOf(bot.id)) {
       const applied = sessionSelections.get(sessionId)
       if (!force && applied !== undefined && sameSelection(applied, route)) continue
-      await selectSessionModel(sessionId, route)
-        .catch(error => rt.warn('ds-bot: model for %s in a group not applied: %s', bot.name, error))
+      await selectSessionModel(sessionId, route).catch(error => {
+        if (strict) throw error
+        rt.warn('ds-bot: model for %s in a group not applied: %s', bot.name, error)
+      })
     }
     if (!ownChanged) return ref
     bot.appliedModel = ref

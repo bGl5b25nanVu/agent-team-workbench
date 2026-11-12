@@ -7,10 +7,13 @@ import { DSH_KO, HOST_ERRORS_KO, KO } from './locales/ko.js'
 import { DSH_ES, HOST_ERRORS_ES, ES } from './locales/es.js'
 import { DSH_FR, HOST_ERRORS_FR, FR } from './locales/fr.js'
 import { DSH_DE, HOST_ERRORS_DE, DE } from './locales/de.js'
+import { TEAM_EN_FALLBACK, TEAM_ZH } from './team-copy.js'
+import { BRAND } from '../shared/branding.js'
 
 export const NAMESPACE = 'ds-bot'
 
 const ZH = {
+  ...TEAM_ZH,
   // Shared
   'Main Bot': '主 Bot',
   Working: '进行中',
@@ -1704,11 +1707,11 @@ export const LANGUAGES = [
 export const DICTIONARY = {
   zh: ZH,
   'zh-TW': ZH_TW,
-  ja: JA,
-  ko: KO,
-  es: ES,
-  fr: FR,
-  de: DE,
+  ja: { ...TEAM_EN_FALLBACK, ...JA },
+  ko: { ...TEAM_EN_FALLBACK, ...KO },
+  es: { ...TEAM_EN_FALLBACK, ...ES },
+  fr: { ...TEAM_EN_FALLBACK, ...FR },
+  de: { ...TEAM_EN_FALLBACK, ...DE },
 }
 
 const HOST_ERROR_TABLE = {
@@ -1827,6 +1830,13 @@ export function installLocale(locale) {
 
 export function t(key, params) {
   return bound ? bound(key, params) : fill(key, params)
+}
+
+// Rebrand only static product copy before interpolation, preserving user-provided values.
+export function productText(key, params) {
+  const template = bound ? bound(key) : key
+  const brand = language().toLowerCase().startsWith('zh') ? BRAND.nameZh : BRAND.name
+  return fill(template.replaceAll('DS Bot', brand), params)
 }
 
 // A message from the host, in the interface language.

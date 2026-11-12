@@ -517,6 +517,7 @@ export function install(rt) {
   // A goal message into the room's own Session, which relays it as a new round:
   // the user's draft request, a resume after the user continues, or an idle nudge.
   async function queueGoalRelay(room, goal, text, senderName = 'You') {
+    if (room.creationIncomplete === true) throw new Error('Finish creating this team before starting work')
     const agent = await rt.resolveAgent(rt.sessionOfRoom(room))
     agent.followup(createUserMessage({
       content: [{ type: 'text', text }],
@@ -529,6 +530,7 @@ export function install(rt) {
   async function goalDraft(roomId, text) {
     const room = rt.roomOf(roomId)
     if (room === undefined) return { error: 'Unknown group chat' }
+    if (room.creationIncomplete === true) return { error: 'Finish creating this team before starting work' }
     const input = String(text ?? '').trim()
     if (input === '' || input.length > BRIEF_MAX) return { error: 'Write what this group should achieve, in at most 2000 characters.', code: 'bot/invalid' }
     const admin = room.members.map(rt.botOf).filter(Boolean).find(bot => rt.isAdminOf(room, bot.id))
