@@ -6,7 +6,9 @@
 
 共作基于 [Fei2411/DS-Bot](https://github.com/Fei2411/DS-Bot) 和 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)。本次改造采用蓝白界面与灰象协调者，加入六角色团队创建、成员配置、目标总览和待办中心，继续使用原项目的真实 Bot、群聊、Goal、权限及模型机制。
 
-**当前交付状态：已完成本地源码改造，实现分支为 `feat/team-workbench`。** [自有 fork](https://github.com/bGl5b25nanVu/agent-team-workbench) 已建立，但这份完整实现尚未推送；本文不代表远端已有该分支或已发布共作安装包。以下步骤从拿到并解压的完整源码目录运行，不依赖尚未发布的 release。完整验证结果与交付限制见[首版交付记录](docs/plans/2026-11-12-gongzuo-delivery.md)；浏览器视觉验收状态见[design-qa.md](design-qa.md)。
+**当前交付状态：本地实现、浏览器补验及最终截图对照均已完成；实现分支为 `feat/team-workbench`。** 2026-11-12 在真实 Chrome 中通过建队流程 13 项、任务与问题答复流程 8 项，修复了角色图片 HTTP 400、手机底栏遮挡、透明图边框和中文标签问题。
+
+[自有 fork](https://github.com/bGl5b25nanVu/agent-team-workbench) 已建立，但当前 GitHub 未登录，完整实现尚未推送，没有对应实现 PR 或 CI 结果，也未发布共作安装包。以下步骤从完整源码目录运行。验证范围、上轮结果与剩余条件见[交付与补验记录](docs/plans/2026-11-12-gongzuo-delivery.md)；最终视觉状态见[design-qa.md](design-qa.md)。
 
 ## 这次做了什么
 
@@ -123,6 +125,27 @@ npx @deepseek-ai/dsh@0.2.2-rc.1 web --no-open
 
 ## 开发预览与验证
 
+### 最新补验结果
+
+| 检查 | 2026-11-12 结果 |
+| --- | --- |
+| 插件全量测试 | 2229 项，2226 通过，3 跳过，0 失败 |
+| 真实 DSH + mock 集成 smoke | 57 / 57 步通过 |
+| Chrome 建队交互 | 13 / 13 项通过；创建和配置前后模型调用均为 0 |
+| Chrome 目标与问题答复 | 8 / 8 项通过；恢复不重复提交 Goal，问题回答与会话回执对应，待办清除 |
+| 明暗主题、角色图片、减少动效 | 自动检查及最终图片对照通过；复核范围与合理差异见 design-qa.md |
+| Lint | 0 错误，76 条警告 |
+| 插件构建及 client/link 生成文件检查 | 本轮 `npm run build` 和两项 `--check` 均通过 |
+| 桌面应用测试 | 沿用上轮 475 通过、4 跳过；本轮桌面代码未变，未重复执行 |
+
+浏览器测试使用真实 DSH `0.2.2-rc.1`、Chrome 157 和 Node.js 24.21，模型回复来自脚本 mock。目标测试区分协调者工作请求和后台记忆请求，并核对其他五位成员仍待命。这些检查不代表真实模型的任务质量、完整 Goal 阶段完成，或跨平台安装包已经验证。
+
+截图与结构化结果保存在 [本轮验证证据](docs/design/verification/2026-11-12-resume/)，其中 `before/` 是历史问题截图；`final-ui/`、`task-final/`、`visual-final/` 是本轮补验结果。
+
+最终复核对照了选定方案与浅色建队页、成员检查器，并查看手机底栏、深色建队页、工作台和问题答复画面。六种角色形象完整且无方形边框，390px 手机底部操作不再重叠。实现保留实际产品导航、待办、聊天和更详细的运行设置，采用系统字体与更紧凑卡片；验收通过不代表逐像素复刻概念图。截图中的英文成员名来自测试输入。
+
+### 本地预览
+
 以下预览使用脚本化 mock 模型，不需要真实密钥，也不能用来证明真实模型的协作质量。从源码根目录开始运行：
 
 ```sh
@@ -145,6 +168,18 @@ npm run lint
 ```
 
 团队专项用例覆盖创建去重、部分失败与恢复、延迟启动、复用成员不改写、权限预检、任务状态、语言文案及关键界面动作。修改服务端还应运行 [CONTRIBUTING.md](CONTRIBUTING.md#test-a-change) 中的隔离 smoke；桌面修改在 `app/` 运行 `npm test`，并按实际平台验证源码启动。mock、单元测试、真实浏览器验证与真实提供商验证应分别记录。
+
+### 重现浏览器补验
+
+保持前述独立预览运行，在另一个终端进入 `ds-bot/`。将 `CHROME_BIN` 指向本机已安装的 Chrome/Chromium；任务脚本的输入是建队脚本实际生成的 `result.json`，不能用手写团队状态代替：
+
+```sh
+CHROME_BIN="/absolute/path/to/chrome" node dev/team-ui-flow.mjs gongzuo-preview 4173
+CHROME_BIN="/absolute/path/to/chrome" node dev/team-ui-task-flow.mjs "/absolute/path/to/flow/result.json"
+CHROME_BIN="/absolute/path/to/chrome" node dev/team-ui-visual.mjs gongzuo-preview 4173
+```
+
+脚本打印各自证据目录，失败时保留实际失败步骤和截图。任务脚本复用已经提交的同一测试 Goal，避免恢复验证时重复创建目标；权限审批按钮及网络故障恢复注入未被这组浏览器脚本覆盖。检查结束后停止预览服务。
 
 `ds-bot/client.js` 是生成文件；修改 `src/client/` 后运行构建，不手动编辑生成代码。
 
