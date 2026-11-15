@@ -19,4 +19,8 @@
 
 为了提供安装包交付，CI 在 Windows、macOS arm64/x64 和 Linux 的安装及验证步骤通过后，会上传保留 14 天的 GitHub Actions artifact；未通过验证的作业不发布安装包。原 CI 仍负责完整版本组合测试、移动端类型检查、桌面包验证、Docker 和最终 `Test result` 门禁。
 
+## 预发布构建中的测试同步修复
+
+手动 dry-run 工作流 [#43704968596](https://github.com/bGl5b25nanVu/agent-team-workbench/actions/runs/43704968596) 在 `rounds.test.js` 中间歇失败：暂停群组收到 `@all` 消息后，测试用固定 20 毫秒等待后台事件，然后立即检查暂停队列。在忙碌 runner 中有时尚未完成该轮处理，导致空列表误判。测试现在等待对应 `group_relay` Promise 完成后检查队列，不放宽任何原有断言；该专项用例本地连续三次通过。此修复也将由后续 GitHub CI 重新验证。
+
 本说明记录修复缘由，不应替代 GitHub 上最新 PR/CI 检查。真实付费模型、实际 Android APK 安装以及未实现的硬预算等能力，不能因为模拟浏览器验收通过而宣称已验收。
