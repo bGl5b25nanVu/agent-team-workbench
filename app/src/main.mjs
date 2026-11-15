@@ -1288,7 +1288,7 @@ function createWindow() {
     // The window never squeezes the chat: RAIL_WIDTH + MIN_CHAT from ds-bot's
     // src/client/frame-layout.js is the avatar rail plus the smallest chat column.
     ...startWindow.mainBounds(), minWidth: 508, minHeight: 480,
-    title: 'DS Bot', show: false, icon: iconFile,
+    title: shellText().tooltip, show: false, icon: iconFile,
     backgroundColor: material ? '#00000000' : dark ? '#1b1b1c' : '#ffffff',
     // Frameless as in DSH Desktop: the window controls overlay the page's band. On Windows the
     // caption buttons keep the sidebar's colors until the page sends the colors of the surface
@@ -1455,7 +1455,7 @@ function setMenu() {
     items.push({ type: 'separator' }, { label: t.quit, click: () => { shell.quit() } })
   }
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: app.name, submenu: items },
+    { label: t.tooltip, submenu: items },
     { role: 'fileMenu' }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' },
   ]))
 }

@@ -8,6 +8,11 @@ import { createSource } from './sources.js'
 
 const THEME_KEYS = ['bg', 'sidebar', 'bubble', 'card', 'text', 'user', 'userText', 'accent']
 const THEMES = {
+  gongzuo: {
+    label: 'Gongzuo',
+    light: { bg: '#fbfcff', sidebar: '#f0f3f9', bubble: '#edf0f8', card: '#ffffff', text: '#171d2b', user: '#3157ed', userText: '#ffffff', accent: '#3157ed' },
+    dark: { bg: '#111722', sidebar: '#161e2d', bubble: '#202b3e', card: '#1a2333', text: '#edf1fa', user: '#3458da', userText: '#ffffff', accent: '#91a8ff' },
+  },
   deepseek: {
     label: 'DeepSeek',
     light: { bg: '#fcfcfc', sidebar: '#f7f7f7', bubble: '#eeeeee', card: '#ffffff', text: '#141414', user: '#070707', userText: '#fcfcfc', accent: '#4d6bfe' },

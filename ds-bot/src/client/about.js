@@ -1,14 +1,17 @@
-// Settings → About DS Bot: the version, updates for DS Bot and DSH, and the links to
+// Settings → About Gongzuo: the version, updates for Gongzuo and DSH, and the links to
 // the repository. The sidebar's cloud button shows the same update state.
 import { createElement as h, useEffect, useState } from 'react'
 import { GitHubMark } from './connector-marks.js'
 import { whenText } from './feedback.js'
-import { dateLocale, hostText, t } from './i18n.js'
+import { dateLocale, hostText, productText, t } from './i18n.js'
 import { StarLineIcon } from './icons.js'
 import { SPRING_POP } from './motion.js'
 import { BotMark } from './mark.js'
 import { MAIN_LOOK } from './characters.js'
 import { showsDshRow } from './dsh-offer.js'
+import { BRAND } from '../shared/branding.js'
+
+const productCopy = productText
 
 // The length of the mark's `done` hop (bt-done in styles.js).
 const CHEER_MS = 1800
@@ -16,12 +19,12 @@ const CHEER_MS = 1800
 const starCount = count => new Intl.NumberFormat(dateLocale(), { notation: 'compact', maximumFractionDigits: 1 }).format(count)
 
 function botHint(update) {
-  if (update.phase === 'installing') return t('Updating DS Bot…')
-  if (update.phase === 'installed') return t('Restart DSH to start using DS Bot {version}.', { version: update.installed ?? update.latest })
-  if (update.phase === 'updated') return t('DS Bot {version} is installed.', { version: update.installed ?? update.latest })
+  if (update.phase === 'installing') return productCopy('Updating DS Bot…')
+  if (update.phase === 'installed') return productCopy('Restart DSH to start using DS Bot {version}.', { version: update.installed ?? update.latest })
+  if (update.phase === 'updated') return productCopy('DS Bot {version} is installed.', { version: update.installed ?? update.latest })
   if (update.phase === 'failed') return t('The update did not finish: {reason}', { reason: hostText(update.error ?? '') })
-  if (update.available) return t('DS Bot {version} is available', { version: update.latest })
-  if (update.source === 'app') return t('Updates come with the DS Bot app.')
+  if (update.available) return productCopy('DS Bot {version} is available', { version: update.latest })
+  if (update.source === 'app') return productCopy('Updates come with the DS Bot app.')
   if (update.enabled === false) return t('Update checks are off.')
   if (update.source === 'path') return t('Installed from a local folder; update it there.')
   if (!update.checkedAt) return null
@@ -30,7 +33,7 @@ function botHint(update) {
   return `${update.latest ? t('Up to date') : t('Could not check for updates.')} · ${checked}`
 }
 
-// The DS Bot row in the desktop app shows the app's own update state, kept as ownApp on
+// The product row in the desktop app shows the app's own update state, kept as ownApp on
 // the update value. Anything that is not a state object (DSH Desktop, DSH Web, an
 // unpackaged app) leaves the row with today's "comes with the app" text.
 export function ownAppRow(ownApp) {
@@ -51,7 +54,7 @@ function dshHint(dsh, shown) {
   if (dsh.phase === 'installing') return t('Updating DSH…')
   if (dsh.phase === 'installed') return t('Restart DSH to start using DSH {version}.', { version: dsh.installed ?? dsh.verified })
   if (dsh.phase === 'failed') return t('The update did not finish: {reason}', { reason: hostText(dsh.error ?? '') })
-  if (dsh.available === false && dsh.blockedBy) return t('Update DS Bot {version} first.', { version: dsh.blockedBy })
+  if (dsh.available === false && dsh.blockedBy) return productCopy('Update DS Bot {version} first.', { version: dsh.blockedBy })
   if (shown) return t('DSH {version} is available', { version: dsh.verified })
   return t('Version {version}', { version: dsh.current })
 }
@@ -67,7 +70,7 @@ export function AboutPage({ useUpdate, actions, run, Section, Row }) {
     actions.repoStars().then((count) => { if (live && Number.isInteger(count)) setStars(count) }, () => {})
     return () => { live = false }
   }, [])
-  // The whale hops when the page opens, after a check, and when an update is in.
+  // The coordinator cheers when the page opens, after a check, and when an update is in.
   const [cheer, setCheer] = useState(true)
   useEffect(() => {
     if (!cheer) return undefined
@@ -107,24 +110,25 @@ export function AboutPage({ useUpdate, actions, run, Section, Row }) {
         ? h('button', { type: 'button', className: 'bt-fb-primary', disabled: dshPhase === 'installing', onClick: () => run(actions.installDshUpdate()) },
             dshPhase === 'installing' ? t('Updating…') : dshPhase === 'failed' ? t('Try again') : t('Update'))
         : null
-  const repo = update.repoUrl
+  const repo = BRAND.repo
   return [
     h('div', { key: 'hero', className: 'bt-about-hero' },
       h('span', { className: 'bt-about-mark' }, h(BotMark, { look: MAIN_LOOK, bot: { id: 'about' }, size: 52, state: markState, live: true, gaze: true, pokeable: true })),
       h('div', { className: 'bt-about-copy' },
-        h('span', { className: 'bt-about-name' }, 'DS Bot'),
+        h('span', { className: 'bt-about-name' }, t(BRAND.name)),
         update.current ? h('span', { className: 'bt-about-version' }, t('Version {version}', { version: update.current })) : null),
       repo ? h('a', {
-        className: 'bt-star', href: repo, target: '_blank', rel: 'noopener noreferrer', title: t('Star DS Bot on GitHub'),
-        'aria-label': stars === null ? t('Star DS Bot on GitHub') : `${t('Star DS Bot on GitHub')} · ${t('{count} stars', { count: stars })}`,
+        className: 'bt-star', href: repo, target: '_blank', rel: 'noopener noreferrer', title: productCopy('Star DS Bot on GitHub'),
+        'aria-label': stars === null ? productCopy('Star DS Bot on GitHub') : `${productCopy('Star DS Bot on GitHub')} · ${t('{count} stars', { count: stars })}`,
       },
       h('span', { className: 'bt-star-main' }, h('span', { className: 'bt-star-icon' }, h(StarLineIcon)), 'Star'),
       stars === null ? null : h('span', { className: 'bt-star-count' }, starCount(stars))) : null),
-    repo ? h('p', { key: 'ask', className: 'bt-about-ask' }, t('If DS Bot helps you, a star on GitHub helps more people find it.')) : null,
+    repo ? h('p', { key: 'ask', className: 'bt-about-ask' }, productCopy('If DS Bot helps you, a star on GitHub helps more people find it.')) : null,
     h(Section, { key: 'updates', title: t('Updates') },
-      h(Row, { label: 'DS Bot', hint: ownRow?.hint ?? botHint(update) }, botControl, update.available && update.notesUrl ? h('a', linkProps(update.notesUrl), t("What's new")) : null),
+      h(Row, { label: t(BRAND.name), hint: ownRow?.hint ?? botHint(update) }, botControl, update.available && update.notesUrl ? h('a', linkProps(update.notesUrl), t("What's new")) : null),
       dsh?.current ? h(Row, { label: 'DeepSeek Harness', hint: dshHint(dsh, dshShown) }, dshControl) : null),
     h(Section, { key: 'links', title: t('Links') },
+      h(Row, { label: 'DS-Bot · Apache 2.0', hint: t('Based on the open-source DS-Bot project') }, h('a', linkProps(BRAND.upstream), h(GitHubMark), t('Open'))),
       repo ? h(Row, { label: t('Source code'), hint: repo.replace(/^https:\/\//, '') }, h('a', linkProps(repo), h(GitHubMark), t('Open'))) : null,
       update.notesUrl ? h(Row, { label: t('Release notes') }, h('a', linkProps(update.notesUrl), t('Open'))) : null,
       h(Row, { label: t('Report a problem') }, h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: () => actions.openSettings('feedback') }, t('Open')))),

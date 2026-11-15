@@ -177,12 +177,12 @@ jobs:
           $ErrorActionPreference = 'Stop'
           function Find-Entry($root) {
             Get-ChildItem "$root\Software\Microsoft\Windows\CurrentVersion\Uninstall" |
-              Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -like 'DS Bot*' }
+              Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -like 'Gongzuo*' }
           }
           $installer = Get-Item dist-pack/DS-Bot-*-win-x64.exe
           Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait
-          $dir = Join-Path $env:LOCALAPPDATA 'Programs\DS Bot'
-          $exe = Join-Path $dir 'DS Bot.exe'
+          $dir = Join-Path $env:LOCALAPPDATA 'Programs\Gongzuo'
+          $exe = Join-Path $dir 'Gongzuo.exe'
           if (-not (Test-Path $exe)) { throw "The installer did not put the app in $dir" }
           $entry = Find-Entry 'HKCU:'
           if (-not $entry) { throw 'No uninstall entry for the current user' }
@@ -210,14 +210,14 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $exe = Join-Path $env:LOCALAPPDATA 'Programs\DS Bot\DS Bot.exe'
+          $exe = Join-Path $env:LOCALAPPDATA 'Programs\Gongzuo\Gongzuo.exe'
           node scripts/check-update.mjs $exe dist-next
           if ($LASTEXITCODE -ne 0) { throw 'The installed app did not take the update' }
           # The installer goes on after the app has quit.
           function Installed-Version {
             Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' |
               ForEach-Object { Get-ItemProperty $_.PSPath } |
-              Where-Object { $_.DisplayName -like 'DS Bot*' } |
+              Where-Object { $_.DisplayName -like 'Gongzuo*' } |
               Select-Object -ExpandProperty DisplayVersion
           }
           $deadline = (Get-Date).AddSeconds(240)
@@ -233,10 +233,10 @@ jobs:
           $ErrorActionPreference = 'Stop'
           function Find-Entry($root) {
             Get-ChildItem "$root\Software\Microsoft\Windows\CurrentVersion\Uninstall" |
-              Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -like 'DS Bot*' }
+              Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -like 'Gongzuo*' }
           }
-          $dir = Join-Path $env:LOCALAPPDATA 'Programs\DS Bot'
-          $exe = Join-Path $dir 'DS Bot.exe'
+          $dir = Join-Path $env:LOCALAPPDATA 'Programs\Gongzuo'
+          $exe = Join-Path $dir 'Gongzuo.exe'
           # The uninstaller removes the program only: the data location and the app's own data stay.
           $kept = foreach ($folder in (Join-Path $HOME '.ds-bot'), (Join-Path $env:APPDATA 'DS Bot')) {
             New-Item -ItemType Directory -Force $folder | Out-Null
@@ -244,7 +244,7 @@ jobs:
             Set-Content $file 'kept'
             $file
           }
-          $uninstaller = Join-Path $dir 'Uninstall DS Bot.exe'
+          $uninstaller = Join-Path $dir 'Uninstall Gongzuo.exe'
           Start-Process -FilePath $uninstaller -ArgumentList '/currentuser', '/S' -Wait
           # The uninstaller goes on from a copy in the temp folder, so wait for its result.
           $deadline = (Get-Date).AddSeconds(120)
@@ -252,6 +252,15 @@ jobs:
           if (Test-Path $exe) { throw 'The uninstaller left the app in place' }
           if (Find-Entry 'HKCU:') { throw 'The uninstaller left its uninstall entry' }
           foreach ($file in $kept) { if (-not (Test-Path $file)) { throw "The uninstaller removed $file" } }
+
+      - name: Upload verified Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gongzuo-windows-x64
+          path: app/dist-pack/DS-Bot-*-win-x64.exe
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
 
   app-package-macos:
     name: Desktop app package (macOS ${{ matrix.arch }})
@@ -320,8 +329,8 @@ jobs:
         run: |
           zip="dist-pack/DS-Bot-$(node -p "require('./package.json').version")-mac-${{ matrix.arch }}.zip"
           ditto -x -k "$zip" /Applications
-          app="/Applications/DS Bot.app"
-          exe="$app/Contents/MacOS/DS Bot"
+          app="/Applications/Gongzuo.app"
+          exe="$app/Contents/MacOS/Gongzuo"
           codesign --verify --deep --strict "$app"
           file "$exe"
           expected="${{ matrix.arch }}"
@@ -329,6 +338,15 @@ jobs:
           file -b "$exe" | grep -F "$expected"
           node scripts/check-packed.mjs "$exe"
           node scripts/check-update.mjs "$exe" 99.0.0
+
+      - name: Upload verified macOS archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gongzuo-macos-${{ matrix.arch }}
+          path: app/dist-pack/DS-Bot-*-mac-${{ matrix.arch }}.zip
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
 
   app-package-linux:
     name: Desktop app package (Linux x64)
@@ -399,10 +417,10 @@ jobs:
           version="$(node -p "require('./package.json').version")"
           sudo apt-get install -y "./dist-pack/DS-Bot-$version-linux-amd64.deb"
           test -f /usr/share/applications/dsbot.desktop
-          xvfb-run -a node scripts/check-packed.mjs "/opt/DS Bot/dsbot"
+          xvfb-run -a node scripts/check-packed.mjs "/opt/Gongzuo/dsbot"
       # A deb cannot update itself: it points at the release page, as on macOS.
       - name: The deb's app hears of a new version
-        run: xvfb-run -a node scripts/check-update.mjs "/opt/DS Bot/dsbot" 99.0.0
+        run: xvfb-run -a node scripts/check-update.mjs "/opt/Gongzuo/dsbot" 99.0.0
       # The update builds the app a second time, so it runs only for changes to the app or the
       # workflows. The AppImage downloads the new one and replaces itself as it quits.
       - name: Does the change touch the app?
@@ -429,7 +447,19 @@ jobs:
       - name: Uninstall
         run: |
           sudo apt-get remove -y dsbot
-          test ! -e "/opt/DS Bot/dsbot"
+          test ! -e "/opt/Gongzuo/dsbot"
+
+      - name: Upload verified Linux packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gongzuo-linux-x64
+          path: |
+            app/dist-pack/DS-Bot-*-linux-x86_64.AppImage
+            app/dist-pack/DS-Bot-*-linux-amd64.deb
+            app/dist-pack/latest-linux.yml
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
 
   docker:
     name: Docker startup and data migration

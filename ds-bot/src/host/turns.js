@@ -1208,6 +1208,9 @@ export function install(rt) {
     const controller = ctx.sessionController
     const admitted = async function (request, ...rest) {
       try {
+        await rt.activateTeamBot?.(rt.selfOf(request?.sessionId), request?.sessionId)
+        const room = rt.roomOf(request?.sessionId)
+        if (room?.creationIncomplete === true) throw new Error('Finish creating this team before starting work')
         return await prompt.call(this, request, ...rest)
       } catch (error) {
         const id = request?.sessionId

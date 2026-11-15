@@ -5,6 +5,8 @@ import { mkdir } from 'node:fs/promises'
 import { MAX_AVATAR_IMAGE, ROOM_MAX_MEMBERS, ROOM_MODES, ROOM_NAME_MAX, ROOM_NOTICE_MAX, SECTION_COLORS, SECTION_NAME_MAX } from './constants.js'
 import { currentColor, isColor, normalize, unquote } from './text.js'
 import { nameProblem } from '../shared/mentions.js'
+import { BRAND } from '../shared/branding.js'
+import { PRESET_VERSION, buildRoleInstructions } from '../shared/team-presets.js'
 
 const BROWSER_GRANT_KINDS = new Set(['post', 'upload', 'download', 'delete', '*'])
 const HOSTNAME = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*$/
@@ -83,18 +85,35 @@ export function install(rt) {
   // `dir` is a working folder outside the team workspace. Such a Session is made by cwd
   // alone, so it joins no DSH workspace and the user's own project lists stay as they are —
   // unless the folder is already registered as a workspace, which it then joins (#710).
-  async function createSession(title, { dir } = {}) {
+  async function createSession(title, { dir, strictFolder = false } = {}) {
     // A Bot's tools run here too; while another dsh holds the team, a new Session would
     // belong to no saved Bot.
     const readOnly = rt.readOnly()
     if (readOnly !== undefined) throw new Error(readOnly)
     const usable = dir !== undefined && await rt.isFolder(dir)
+    if (strictFolder && dir !== undefined && !usable) throw new Error('The selected working folder is no longer available')
     if (dir !== undefined && !usable) rt.warn('ds-bot: the working folder %s is gone; %s starts in the team workspace', dir, title)
     const known = usable ? await ctx.workspaceRegistry.resolveByPath(dir) : undefined
     const place = known !== undefined ? { workspaceId: known.id } : usable ? { cwd: dir } : { workspaceId: await ensureWorkspace() }
-    const { sessionId } = await ctx.sessionController.create({ ...place, ...await botPreset() })
-    const agent = await rt.resolveAgent(sessionId)
-    await ctx.sessionTitle.rename(agent.session, title)
+    const options = { ...place, ...await botPreset() }
+    let sessionId
+    try {
+      const created = await ctx.sessionController.create(options)
+      sessionId = created.sessionId
+    } catch (error) {
+      if (strictFolder) error.creationUncertain = true
+      throw error
+    }
+    try {
+      const agent = await rt.resolveAgent(sessionId)
+      await ctx.sessionTitle.rename(agent.session, title)
+    } catch (error) {
+      if (strictFolder) {
+        error.creationUncertain = true
+        error.createdSessionId = sessionId
+      }
+      throw error
+    }
     return sessionId
   }
 
@@ -183,8 +202,9 @@ export function install(rt) {
     return holdName('bot', cleanName, () => buildBot(cleanName, options))
   }
 
-  async function buildBot(cleanName, { role = '', instructions = '', color, brief = '', createdBy, main = false, avatar, model, effort, workDir, copyOf, pickModel = false, section, sectionId }) {
+  async function buildBot(cleanName, { role = '', instructions = '', color, brief = '', createdBy, main = false, avatar, model, effort, workDir, copyOf, pickModel = false, section, sectionId, deferKickoff = false, permission, teamCreation, presetId, presetVersion, creativity }) {
     const cleanAvatarValue = cleanAvatar(avatar)
+    const permissionValue = permission === undefined ? undefined : rt.cleanBotPermission(permission)
     // The model is fixed at creation, so a later change of the DSH default leaves it alone.
     const modelRef = model ? await rt.resolveModel(model) : pickModel ? undefined : await rt.defaultBotModel()
     // A thinking level needs a model to resolve against; with none it would be dropped
@@ -199,7 +219,7 @@ export function install(rt) {
     const clash = dir === undefined ? undefined : await rt.privateClash(dir)
     if (clash) throw new Error(`${dir} is in or around the folder of ${clash.name}, a private Bot, so ${cleanName} cannot work there`)
     if (!main && (section !== undefined || sectionId !== undefined)) resolveSectionInput({ section, sectionId }, { allowCreate: false })
-    const id = await createSession(cleanName, { dir })
+    const id = await createSession(cleanName, { dir, strictFolder: !!teamCreation })
     try {
       const resolvedSecId = !main ? resolveSectionInput({ section, sectionId }) : undefined
       state.bots[id] = {
@@ -213,10 +233,21 @@ export function install(rt) {
         ...(effortId ? { effort: effortId } : {}),
         ...(dir ? { workDir: dir } : {}),
         ...(resolvedSecId ? { sectionId: resolvedSecId } : {}),
+        ...(permissionValue ? { permission: permissionValue } : {}),
+        ...(deferKickoff ? { dormant: true } : {}),
+        ...(teamCreation ? { teamCreation, creationIncomplete: true } : {}),
+        ...(presetId ? { presetId, presetVersion, creativity } : {}),
         instructions: String(instructions).trim(),
         createdAt: Date.now(),
         createdBy: createdBy ?? null,
         capabilities: [],
+      }
+      if (permissionValue) await rt.applyPermission(state.bots[id], id)
+      if (deferKickoff) {
+        delete state.bots[id].creationIncomplete
+        await rt.save({ required: true })
+        await rt.resolveAgent(id)
+        return state.bots[id]
       }
       if (main) state.mainBotIds.push(id)
       const creator = rt.botOf(createdBy)
@@ -255,6 +286,17 @@ export function install(rt) {
         .then(() => sendKickoff(bot, greeting))
       return bot
     } catch (error) {
+      if (teamCreation) {
+        if (state.bots[id]) {
+          state.bots[id].creationIncomplete = true
+          error.createdBotId = id
+          await rt.save({ required: true }).catch(() => {})
+        } else {
+          error.creationUncertain = true
+          error.createdSessionId = id
+        }
+        throw error
+      }
       // The Bot's Session was already made: archive it instead of leaving an orphan.
       delete state.bots[id]
       state.mainBotIds = state.mainBotIds.filter(other => other !== id)
@@ -272,6 +314,7 @@ export function install(rt) {
   // again (turns.js), to go out once the user has fixed that.
   const sentKickoffs = new Map()
   function sendKickoff(bot, greeting) {
+    if (bot.dormant === true) return
     sentKickoffs.set(bot.id, greeting)
     const text = greeting.afterUser ? `${AFTER_USER} ${writeIn(rt.uiLanguage?.())}\n${OWN_RULES}` : greeting.text
     void rt.deliver({ fromId: greeting.from ?? undefined, toId: bot.id, text, role: 'kickoff' })
@@ -283,7 +326,7 @@ export function install(rt) {
   const releasing = new Set()
   async function releaseKickoff(bot) {
     const greeting = bot.kickoff
-    if (greeting === undefined || !bot.model) return false
+    if (bot.dormant === true || greeting === undefined || !bot.model) return false
     delete bot.kickoff
     releasing.add(bot.id)
     await rt.save().catch((error) => { releasing.delete(bot.id); throw error })
@@ -301,7 +344,7 @@ export function install(rt) {
     const bot = rt.botOf(botId)
     const greeting = sentKickoffs.get(botId)
     sentKickoffs.delete(botId)
-    if (bot === undefined || greeting === undefined || bot.kickoff !== undefined) return
+    if (bot === undefined || bot.dormant === true || greeting === undefined || bot.kickoff !== undefined) return
     // "You are the Main Bot" must not go out after a demotion.
     if (greeting.main && !rt.isMain(botId)) return
     bot.kickoff = greeting
@@ -315,6 +358,10 @@ export function install(rt) {
   // last listed, so it is marked before that turn can end.
   function userWrote(botId) {
     const bot = rt.botOf(botId)
+    if (bot?.dormant === true && bot.creationIncomplete !== true) {
+      delete bot.dormant
+      void rt.save().catch(() => {})
+    }
     const greeting = bot?.kickoff
     if (greeting === undefined || greeting.afterUser) return
     if (greeting.main && (bot.blocked !== undefined || !rt.isUsable(bot.model))) greeting.afterUser = true
@@ -469,13 +516,13 @@ export function install(rt) {
     // reply. The same edit made from a group Session reaches no own-chat turn, so
     // the notice still goes out.
     const selfEditInChat = actorId === bot.id && fromSessionId === rt.chatOf(bot.id)
-    if (notes.length > 0 && bot.kickoff === undefined && !selfEditInChat) {
+    if (notes.length > 0 && bot.dormant !== true && bot.kickoff === undefined && !selfEditInChat) {
       void rt.deliver({ toId: bot.id, text: notes.join('\n'), role: 'update' })
         .catch(error => rt.warn('ds-bot: profile update for %s not delivered: %s', bot.name, error?.message ?? error))
     }
     if (modelChanged) await rt.applyModel(bot, { force: true })
-    if (engineChanged) void rt.followEngine(bot.id)
-    if (moved) void rt.followFolder({ botId: bot.id })
+    if (engineChanged && bot.dormant !== true) void rt.followEngine(bot.id)
+    if (moved && bot.dormant !== true) void rt.followFolder({ botId: bot.id })
     // A new model lifted what blocked the Bot; a new thinking level alone fixes nothing.
     // releaseKickoff itself leaves when the Bot still lacks a model or holds no greeting.
     if (modelChanged && bot.blocked === undefined) await releaseKickoff(bot)
@@ -624,7 +671,7 @@ export function install(rt) {
   // member when it has one.
   const defaultAdmin = (members, createdBy) => (members.includes(createdBy) ? createdBy : members.find(rt.isMain) ?? null)
 
-  async function createRoom({ members: memberIds = [], name: roomName, notice, mode, admin, createdBy, section, sectionId } = {}) {
+  async function createRoom({ members: memberIds = [], name: roomName, notice, mode, admin, createdBy, section, sectionId, workDir, team } = {}) {
     const members = [...new Set(memberIds)].filter(id => rt.botOf(id))
     checkMembers(members)
     const custom = cleanRoomName(roomName ?? '')
@@ -632,18 +679,22 @@ export function install(rt) {
     if (adminId !== null && !members.includes(adminId)) throw new Error('The admin must be a member of the group')
     if (mode !== undefined && !ROOM_MODES.includes(mode)) throw new Error(`Reply mode must be one of ${ROOM_MODES.join(', ')}`)
     if (section !== undefined || sectionId !== undefined) resolveSectionInput({ section, sectionId }, { allowCreate: false })
-    return holdName('room', custom, () => buildRoom({ members, custom, notice, mode, adminId, createdBy, section, sectionId }))
+    const dir = workDir === undefined || workDir === null ? undefined : await rt.cleanWorkDir(workDir)
+    const clash = dir === undefined ? undefined : await rt.privateClash(dir)
+    if (clash) throw new Error('A team cannot work in or around a private Bot folder')
+    return holdName('room', custom, () => buildRoom({ members, custom, notice, mode, adminId, createdBy, section, sectionId, dir, team }))
   }
 
-  async function buildRoom({ members, custom, notice, mode, adminId, createdBy, section, sectionId }) {
+  async function buildRoom({ members, custom, notice, mode, adminId, createdBy, section, sectionId, dir, team }) {
     const title = custom || autoRoomName(members)
     // The group's own Session only relays; like a member's it moves to a fresh part
     // in the group's folder once the group has one (parts.js).
-    const id = await createSession(title)
+    const id = await createSession(title, { dir, strictFolder: !!team })
     try {
       // A member deleted while the Session was made stays out, and the group is checked
       // again as it is written.
       const live = members.filter(member => rt.botOf(member))
+      if (team && (live.length !== members.length || !live.includes(adminId))) throw new Error('A team member changed during group creation')
       checkMembers(live)
       const lead = adminId === null || live.includes(adminId) ? adminId : defaultAdmin(live, createdBy)
       const name = custom || autoRoomName(live)
@@ -653,6 +704,8 @@ export function install(rt) {
         name,
         ...(custom ? { named: true } : {}),
         ...(resolvedSecId ? { sectionId: resolvedSecId } : {}),
+        ...(dir ? { workDir: dir } : {}),
+        ...(team ? { team, creationIncomplete: true } : {}),
         members: live,
         admin: lead,
         mode: mode ?? 'admin',
@@ -665,8 +718,23 @@ export function install(rt) {
       // The Session was resolved before the group owned it, so its relay tool lands now.
       await rt.resolveAgent(id)
       if (name !== title) await retitleRoom(room)
+      if (team) {
+        delete room.creationIncomplete
+        await rt.save({ required: true })
+      }
       return room
     } catch (error) {
+      if (team) {
+        if (state.rooms[id]) {
+          state.rooms[id].creationIncomplete = true
+          error.createdRoomId = id
+          await rt.save({ required: true }).catch(() => {})
+        } else {
+          error.creationUncertain = true
+          error.createdSessionId = id
+        }
+        throw error
+      }
       // The group's Session was already made: archive it instead of leaving an orphan.
       delete state.rooms[id]
       void rt.save().catch(() => {})
@@ -931,15 +999,15 @@ export function install(rt) {
     await rt.load()
     void rt.syncModels()
     if (state.mainBotIds.some(id => rt.botOf(id))) return
-    // Only the team's first Main Bot is stored as the DeepSeek whale; other Bots get a
-    // look from their id, and a Bot made Main Bot later keeps its own.
-    bootstrapping ??= createBot({ name: defaults.mainName, role: defaults.mainRole, main: true, color: 'deepseek', avatar: { shape: 'whale' }, pickModel: true })
+    // New profiles use the coordinator preset; existing identities and instructions
+    // stay untouched, including when another Bot becomes Main Bot later.
+    bootstrapping ??= createBot({ name: freshName(defaults.mainName), role: defaults.mainRole, main: true, color: 'violet', avatar: { shape: BRAND.coordinatorCharacter }, instructions: buildRoleInstructions('coordinator'), presetId: 'coordinator', presetVersion: PRESET_VERSION, creativity: 'bounded', pickModel: true })
       .finally(() => { bootstrapping = null })
     await bootstrapping
   }
 
   Object.assign(rt, {
-    ensureWorkspace, keepTeamFolder, createSession, createBot, duplicateBot, updateBot, setFlags,
+    ensureWorkspace, keepTeamFolder, createSession, createBot, duplicateBot, updateBot, setFlags, cleanAvatar,
     saveSection, reorderSections, deleteSection,
     roomBusy, autoRoomName, retitleRoom, createRoom, updateRoom, deleteRoom,
     setMain, deleteBot, bootstrap, releaseKickoff, greetingOut, holdKickoffAgain, userWrote, userAnswered,

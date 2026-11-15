@@ -1,0 +1,60 @@
+{
+  "status": "failed",
+  "startedAt": "2026-11-12T10:00:34.088Z",
+  "bench": "gongzuo-acceptance",
+  "origin": "http://127.0.0.1:44174",
+  "commit": "efafa031e8a15785b383ab7217f6b5a6a0b95e12",
+  "browser": "/usr/bin/google-chrome",
+  "node": "v24.21.0",
+  "desktop": {
+    "width": 1487,
+    "height": 1058
+  },
+  "teamName": "UI verification mwddng2w",
+  "memberNames": [
+    "Coordinator mwddng2w",
+    "Researcher mwddng2w",
+    "Engineer mwddng2w",
+    "Designer mwddng2w",
+    "Tester mwddng2w",
+    "Operator mwddng2w"
+  ],
+  "steps": [
+    {
+      "name": "launch-and-authenticate",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:00:34.099Z",
+      "durationMs": 7962
+    },
+    {
+      "name": "initial-six-role-builder",
+      "status": "failed",
+      "startedAt": "2026-11-12T10:00:42.061Z",
+      "error": "page.waitForFunction: Timeout 20000ms exceeded.\n    at /workspace/gongzuo-resume-20261112/repo/ds-bot/dev/team-ui-flow.mjs:170:16\n    at async step (/workspace/gongzuo-resume-20261112/repo/ds-bot/dev/team-ui-flow.mjs:61:20)\n    at async file:///workspace/gongzuo-resume-20261112/repo/ds-bot/dev/team-ui-flow.mjs:164:3",
+      "durationMs": 20465
+    }
+  ],
+  "screenshots": [
+    "failed-initial-six-role-builder.png"
+  ],
+  "pageErrors": [],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+    "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+    "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+    "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+    "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+    "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+    "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+    "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+    "Failed to load resource: the server responded with a status of 400 (Bad Request)"
+  ],
+  "requestFailures": [],
+  "limits": [
+    "Uses the scripted mock model, not a paid provider.",
+    "Does not submit a goal or simulate approval/recovery failures.",
+    "Screenshots still require a human or agent visual comparison."
+  ],
+  "error": "page.waitForFunction: Timeout 20000ms exceeded.\n    at /workspace/gongzuo-resume-20261112/repo/ds-bot/dev/team-ui-flow.mjs:170:16\n    at async step (/workspace/gongzuo-resume-20261112/repo/ds-bot/dev/team-ui-flow.mjs:61:20)\n    at async file:///workspace/gongzuo-resume-20261112/repo/ds-bot/dev/team-ui-flow.mjs:164:3",
+  "finishedAt": "2026-11-12T10:01:02.641Z"
+}

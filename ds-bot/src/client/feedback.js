@@ -3,7 +3,7 @@
 // fail away from any form (menus, the palette).
 import { createElement as h, useEffect, useState } from 'react'
 import { clearClientErrors, clientErrors, clientFacts, failureLabel, issueUrl, WHAT_MAX } from './diagnostics.js'
-import { dateLocale, t } from './i18n.js'
+import { productText, dateLocale, t } from './i18n.js'
 import { CloseIcon } from './icons.js'
 import { SPRING_SHAPE } from './motion.js'
 import { reserveWindow } from './open-window.js'
@@ -38,7 +38,7 @@ function entrySummary(entry) {
   return entry.text
 }
 
-const SOURCES = { turn: 'Model call', host: 'DS Bot', api: 'DS Bot', browser: 'This window' }
+const SOURCES = { turn: 'Model call', host: 'Gongzuo', api: 'Gongzuo', browser: 'This window' }
 
 // Where the new issue opens; `go(url)` tells whether it did.
 const issueWindow = reserveWindow
@@ -100,14 +100,14 @@ export function FeedbackPage({ actions, run, Section, Row }) {
         h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: () => setPreview(!preview), 'aria-expanded': preview }, preview ? t('Hide') : t('Show')),
         h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: copyReport }, t('Copy'))),
       preview ? h('div', { className: 'bt-set-row bt-fb-preview' }, h('pre', { tabIndex: 0, 'aria-label': t('Diagnostics') }, report?.markdown || t('Loading…'))) : null,
-      h(Row, { label: t('GitHub issue'), hint: t('Opens a new issue in the DS Bot repository with all of this filled in. Nothing is sent until you submit it there.') },
+      h(Row, { label: t('GitHub issue'), hint: productText('Opens a new issue in the DS Bot repository with all of this filled in. Nothing is sent until you submit it there.') },
         h('button', { type: 'button', className: 'bt-fb-primary', onClick: openIssue }, t('Report on GitHub')))),
     note ? h('div', { key: 'note', className: 'bt-note bt-fb-note', role: 'status' },
       note,
       issueLink ? [' ', h('a', { key: 'link', href: issueLink, target: '_blank', rel: 'noopener noreferrer' }, t('Open the issue'))] : null) : null,
     h(Section, { key: 'errors', title: report ? t('Recent errors · {count}', { count: total }) : t('Recent errors') },
       shown.length === 0
-        ? h(Row, { label: t('No errors recorded.'), hint: t('Failed model calls and DS Bot problems show here, newest first.') })
+        ? h(Row, { label: t('No errors recorded.'), hint: productText('Failed model calls and DS Bot problems show here, newest first.') })
         : shown.map((entry, index) => h('div', { key: `${entry.time}-${index}`, className: 'bt-set-row bt-fb-entry', title: entry.text },
             h('span', { className: 'bt-fb-dot', 'data-level': entry.level, 'aria-hidden': true }),
             h('div', { className: 'bt-set-copy' },

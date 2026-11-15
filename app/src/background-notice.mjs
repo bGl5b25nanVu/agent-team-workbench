@@ -9,6 +9,7 @@ export class BackgroundNotice {
   #show
   #focus
   #message
+  #title
   #confirm
   #log
   #acknowledged = false
@@ -21,6 +22,7 @@ export class BackgroundNotice {
    *   show: (options: object) => Promise<{ response: number, unasked?: boolean }>,
    *   focus?: () => void,
    *   message: string,
+   *   title?: string,
    *   confirm: string,
    *   log?: Pick<Console, 'warn'>,
    * }} options `marker` is where the acknowledgement is kept, `show` the shell's question;
@@ -31,6 +33,7 @@ export class BackgroundNotice {
     this.#show = options.show
     this.#focus = options.focus ?? (() => {})
     this.#message = options.message
+    this.#title = options.title ?? 'Gongzuo'
     this.#confirm = options.confirm
     this.#log = options.log ?? console
   }
@@ -58,7 +61,7 @@ export class BackgroundNotice {
   async #ask(hide) {
     try {
       const { response, unasked = false } = await this.#show({
-        type: 'info', title: 'DS Bot', message: this.#message,
+        type: 'info', title: this.#title, message: this.#message,
         buttons: [this.#confirm], defaultId: 0, cancelId: -1, noLink: true,
       })
       // A cancelled box leaves the window where it is.

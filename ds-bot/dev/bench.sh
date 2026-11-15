@@ -10,7 +10,8 @@
 # Environment: CONTEXT_WINDOW (the mock models' context window, in tokens, with an 8,000
 # token reply; default: the adapter's own), CHECK_RATIO (the plugin's checkRatio), MOCK_DELAY_MS,
 # DSH_HARNESS (the deepseek-harness checkout; default: beside this checkout, else at the
-# same place in the main worktree).
+# same place in the main worktree). DSH_TEST_CLI optionally selects an installed
+# pinned CLI instead; DSH_TEST_HOST/TRUSTED_HOST configure its test-only web bind.
 set -eu
 NAME=${1:?usage: bench.sh <name> <web-port> <mock-port> [start|stop|reset|status]}
 WEB_PORT=${2:?usage: bench.sh <name> <web-port> <mock-port> [start|stop|reset|status]}
@@ -22,7 +23,9 @@ if [ "$WEB_PORT" = 3080 ]; then echo "port 3080 belongs to the real service" >&2
 PLUGIN="$(cd "$(dirname "$0")/.." && pwd)"
 ROOT="$(dirname "$PLUGIN")"
 HOME_DIR="$ROOT/.dsh-test-$NAME"
-if [ -z "${DSH_HARNESS:-}" ]; then
+if [ -n "${DSH_TEST_CLI:-}" ] && [ -z "${DSH_HARNESS:-}" ]; then
+  DSH_HARNESS="$PLUGIN"
+elif [ -z "${DSH_HARNESS:-}" ]; then
   DSH_HARNESS="$ROOT/deepseek-harness"
   if [ ! -d "$DSH_HARNESS" ]; then
     MAIN="$(dirname "$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)")/$(git -C "$ROOT" rev-parse --show-prefix)"
@@ -79,11 +82,13 @@ EOF
 write_overlay() {
   overlay="$HOME_DIR/bench.patch.yml"
   printf '[]\n' > "$overlay"
-  if [ -n "${CHECK_RATIO:-}" ]; then
-    printf -- '- id: bot\n  config:\n    checkRatio: %s\n' "$CHECK_RATIO" > "$overlay"
+  if [ -n "${CHECK_RATIO:-}${DSH_TEST_MAIN_NAME:-}" ]; then
+    printf -- '- id: bot\n  config:\n' > "$overlay"
+    [ -z "${CHECK_RATIO:-}" ] || printf '    checkRatio: %s\n' "$CHECK_RATIO" >> "$overlay"
+    [ -z "${DSH_TEST_MAIN_NAME:-}" ] || printf '    mainName: %s\n' "$DSH_TEST_MAIN_NAME" >> "$overlay"
   fi
   if [ -n "${CONTEXT_WINDOW:-}" ]; then
-    [ -n "${CHECK_RATIO:-}" ] || : > "$overlay"
+    [ -n "${CHECK_RATIO:-}${DSH_TEST_MAIN_NAME:-}" ] || : > "$overlay"
     {
       printf -- '- id: llm-deepseek\n  config:\n    models:\n'
       printf -- '      - { id: deepseek-flash, contextWindow: %s, maxTokens: 8000, inputModalities: [text, image] }\n' "$CONTEXT_WINDOW"
@@ -109,10 +114,14 @@ start() {
   if ! alive web; then
     log="$HOME_DIR/web.log"
     rm -f "$log" "$HOME_DIR/web.pid"
-    (cd "$DSH_HARNESS" && DSH_HOME="$HOME_DIR" DEEPSEEK_BASE_URL="http://127.0.0.1:$MOCK_PORT/v1" DEEPSEEK_API_KEY=mock-key \
+    (cd "$DSH_HARNESS" && \
+      if [ -n "${DSH_TEST_CLI:-}" ]; then set -- node "$DSH_TEST_CLI"; else set -- pnpm -s dsh; fi
+      set -- "$@" --profile web --patch "$PLUGIN/dev/pin-browse-picker.overlay.yml" --patch "$HOME_DIR/bench.patch.yml"
+      if [ -n "${DSH_TEST_HOST:-}" ]; then set -- "$@" --host "$DSH_TEST_HOST"; fi
+      if [ -n "${DSH_TEST_TRUSTED_HOST:-}" ]; then set -- "$@" --trusted-host "$DSH_TEST_TRUSTED_HOST"; fi
+      DSH_HOME="$HOME_DIR" DEEPSEEK_BASE_URL="http://127.0.0.1:$MOCK_PORT/v1" DEEPSEEK_API_KEY=mock-key \
       exec "$SETSID" sh -c 'set -eu; echo $$ >"$1"; shift; exec "$@"' sh "$HOME_DIR/web.pid" \
-      pnpm -s dsh --profile web --patch apps/web/tests/pin-browse-picker.overlay.yml --patch "$HOME_DIR/bench.patch.yml" \
-      --no-open --port "$WEB_PORT") </dev/null >"$log" 2>&1 &
+      "$@" --no-open --port "$WEB_PORT") </dev/null >"$log" 2>&1 &
     # The process writes its own pid just before dsh starts; wait for that file so a
     # start still in progress is not read as an exit.
     i=0

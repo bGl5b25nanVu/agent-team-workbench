@@ -20,6 +20,13 @@ export function teamActions({ call, after, partFor, roster, ui, live, cards, hel
   // `id` opens one Bot (page 'bots') or one group chat (page 'groups').
   const openSettings = (page = 'general', id = null) => { ui.set(state => ({ ...state, settings: { page, id }, menu: null, palette: null, newChat: null })) }
   return {
+    openWorkspace: (page = 'home', roomId = null, recoveryId = null) => {
+      const workspacePage = ['home', 'teams', 'create', 'inbox'].includes(page) ? page : null
+      ui.set(state => ({ ...state, workspacePage, workspaceRoom: roomId, teamRecovery: recoveryId, details: null, newChat: null, exchange: null, menu: null, palette: null, leftDrawer: false }))
+    },
+    createTeam: payload => after(call('create-team', payload)),
+    teamCreationStatus: operationId => call('team-creation-status', { operationId }),
+    resumeTeamCreation: operationId => after(call('resume-team-creation', { operationId })),
     // The pane starts at the rail's edge, so a floating drawer would stick out from under it.
     openNewChat: (mode, sectionId = null) => { ui.set(state => ({ ...state, newChat: mode, newChatSection: sectionId ?? null, menu: null, palette: null, leftDrawer: false })) },
     openPalette: (query = '') => { ui.set(state => ({ ...state, palette: { query, token: Date.now() }, newChat: null, menu: null })) },

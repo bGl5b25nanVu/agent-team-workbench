@@ -1,7 +1,7 @@
 {
   "name": "ds-bot",
   "version": "0.3.2",
-  "description": "DS Bot: a team of long-lived Bots for DeepSeek Harness, with Main Bots, Bot-to-Bot messages and group chats",
+  "description": "Gongzuo: a coordinated agent team workspace, forked from DS-Bot for DeepSeek Harness",
   "keywords": [
     "dsh-plugin",
     "deepseek-harness",
@@ -11,13 +11,13 @@
     "multi-agent",
     "agents"
   ],
-  "homepage": "https://github.com/Fei2411/DS-Bot#readme",
+  "homepage": "https://github.com/bGl5b25nanVu/agent-team-workbench",
   "bugs": {
-    "url": "https://github.com/Fei2411/DS-Bot/issues"
+    "url": "https://github.com/bGl5b25nanVu/agent-team-workbench/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Fei2411/DS-Bot.git",
+    "url": "git+https://github.com/bGl5b25nanVu/agent-team-workbench.git",
     "directory": "ds-bot"
   },
   "license": "Apache-2.0",
@@ -43,6 +43,7 @@
     "LICENSE"
   ],
   "scripts": {
+    "dev": "node dev/preview.mjs",
     "build": "node scripts/build-client.mjs && node scripts/build-link.mjs",
     "test": "node --import ./test/harness-resolve.mjs --test --test-timeout=120000 --test-force-exit \"test/*.test.js\"",
     "lint": "node scripts/lint.mjs",

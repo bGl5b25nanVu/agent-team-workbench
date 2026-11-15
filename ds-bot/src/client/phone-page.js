@@ -1,7 +1,7 @@
 import { createElement as h, useEffect, useState } from 'react'
 import qrcode from 'qrcode-generator'
 import { Switch } from './bot-settings.js'
-import { dateLocale, t } from './i18n.js'
+import { productText, dateLocale, t } from './i18n.js'
 
 const OFF = { server: '', on: false, status: 'off', phones: [], pairing: null }
 // The quiet zone around a QR code is part of the code: scanners need it to find the edges.
@@ -10,7 +10,7 @@ const QUIET = 4
 function statusText(phone) {
   if (phone.error) return phone.error
   if (!phone.on) return t('Off. Phones cannot reach this computer.')
-  if (phone.status === 'online') return t('On. Paired phones can use DS Bot here.')
+  if (phone.status === 'online') return productText('On. Paired phones can use DS Bot here.')
   if (phone.status === 'offline') return t('Cannot reach the Server. Trying again…')
   return t('Connecting…')
 }

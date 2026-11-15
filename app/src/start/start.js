@@ -4,6 +4,7 @@
 // hidden stage list belong to the director in whale.js. Text is set only through textContent
 // (and text nodes), never as markup.
 import { fill as fillIn, t } from './text.mjs'
+import { brandName } from './brand.mjs'
 import { createDirector, reduced, play, spring, sleep, clamped } from './whale.js'
 
 const root = document.documentElement
@@ -65,6 +66,8 @@ function render(el, vars = {}) {
 }
 function renderStatic() {
   root.lang = lang === 'zh' ? 'zh-CN' : 'en'
+  document.title = brandName(lang)
+  $('.brand-name').textContent = brandName(lang)
   for (const el of document.querySelectorAll('.track [data-t], .footrow [data-t], .caption [data-t]')) render(el)
   $('.track').setAttribute('aria-label', say('status.track'))
   for (const st of document.querySelectorAll('.station')) st.querySelector('.sr').textContent = say(`status.state.${st.dataset.state}`)

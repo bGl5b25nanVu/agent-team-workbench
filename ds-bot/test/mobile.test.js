@@ -62,7 +62,7 @@ function start() {
     routes[options.path] = options
     return register(options)
   }
-  const rt = createRuntime(ctx, { home })
+  const rt = createRuntime(ctx, { home, mainName: 'Chief' })
   const call = async (endpoint, payload) => {
     const response = await routes['/api/bot'].fetch(new Request('http://localhost/api/bot', { method: 'POST', body: JSON.stringify({ endpoint, payload }) }))
     return response.json()

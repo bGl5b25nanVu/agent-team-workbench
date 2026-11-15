@@ -1,4 +1,6 @@
 import { INKS, GRADIENTS, isHex, inkFill } from './inks.js'
+import { RASTER_CHARACTERS } from './team-assets.js'
+import { BRAND } from '../shared/branding.js'
 
 // -------------------------------------------------------------------------
 // Characters: DS Bot's own avatars, small 3D models seen from a
@@ -31,12 +33,12 @@ export const CHARACTERS = {
 }
 // The picker shows every character at once, five to a row. A Bot with no choice gets
 // one of the friendliest seven; the whale is left out so it stays the Main Bot's.
-export const PICKER_SHAPES = Object.keys(CHARACTERS)
+export const PICKER_SHAPES = [...Object.keys(RASTER_CHARACTERS), ...Object.keys(CHARACTERS)]
 export const PICKER_COLUMNS = 5
 export const DEFAULT_SHAPES = ['star', 'moon', 'gumdrop', 'peanut', 'bunny', 'kitty', 'acorn']
 export const FALLBACK_SHAPE = 'gumdrop'
 // The team's first Main Bot, and the plugin's own mark in the sidebar.
-export const MAIN_LOOK = Object.freeze({ shape: 'whale', color: 'deepseek' })
+export const MAIN_LOOK = Object.freeze({ shape: BRAND.coordinatorCharacter, color: 'violet' })
 // Character colors in picker order. Black, the gradients, and the dull gray and brown
 // are never defaults; the user must pick them.
 export const CHARACTER_COLORS = ['black', 'brown', 'red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'violet', 'magenta', 'gray', 'aurora']
@@ -69,7 +71,7 @@ export function lookOf(bot) {
   const avatar = bot?.avatar ?? {}
   return {
     shape: hasShape(avatar.shape) ? avatar.shape : bot?.id ? defaultShape(String(bot.id)) : FALLBACK_SHAPE,
-    image: avatar.image,
+    image: avatar.image ?? SHAPES[avatar.shape]?.image,
     color: colorOf(bot),
   }
 }
@@ -84,11 +86,15 @@ for (const [id, character] of Object.entries(CHARACTERS)) {
   ].join('')
   SHAPES[id] = { label: character.label ?? id[0].toUpperCase() + id.slice(1), size: 100, path: character.body, layers, eyes: character.eyes }
 }
+for (const [id, character] of Object.entries(RASTER_CHARACTERS)) {
+  SHAPES[id] = { ...character, size: 100, eyes: [] }
+}
 export const hasShape = id => typeof id === 'string' && Object.hasOwn(SHAPES, id)
 export const shapeId = id => (hasShape(id) ? id : FALLBACK_SHAPE)
 export const shapeOf = id => SHAPES[shapeId(id)]
 // `flat` draws the silhouette alone, for masks and selection rings.
 export function bodyOf(def, paint, flat = false) {
+  if (def.image) return `<image href="${def.image}" width="100" height="100"/>`
   if (def.path) return `<g fill-rule="evenodd"><path d="${def.path}" fill="${paint}"/>${flat ? '' : def.layers}</g>`
   try { return def.body(paint) } catch { return '' }
 }
@@ -124,6 +130,7 @@ export function characterMarkup(shape, color) {
 const svgUrl = (inner, size) => `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}">${inner}</svg>`)}")`
 export const maskCache = new Map()
 export function maskOf(shape) {
+  if (shapeOf(shape).image) return `url("${shapeOf(shape).image}")`
   let mask = maskCache.get(shape)
   if (mask === undefined) {
     const def = shapeOf(shape)

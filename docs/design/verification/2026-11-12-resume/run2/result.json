@@ -1,0 +1,196 @@
+{
+  "status": "passed",
+  "startedAt": "2026-11-12T10:06:19.670Z",
+  "bench": "gongzuo-acceptance",
+  "origin": "http://127.0.0.1:44174",
+  "commit": "efafa031e8a15785b383ab7217f6b5a6a0b95e12",
+  "browser": "/usr/bin/google-chrome",
+  "node": "v24.21.0",
+  "desktop": {
+    "width": 1487,
+    "height": 1058
+  },
+  "teamName": "UI verification mwdduuqe",
+  "memberNames": [
+    "Coordinator mwdduuqe",
+    "Researcher mwdduuqe",
+    "Engineer mwdduuqe",
+    "Designer mwdduuqe",
+    "Tester mwdduuqe",
+    "Operator mwdduuqe"
+  ],
+  "steps": [
+    {
+      "name": "launch-and-authenticate",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:06:19.706Z",
+      "durationMs": 11835
+    },
+    {
+      "name": "initial-six-role-builder",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:06:31.543Z",
+      "durationMs": 5120
+    },
+    {
+      "name": "templates-and-role-selection",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:06:36.664Z",
+      "durationMs": 555
+    },
+    {
+      "name": "member-names-models-and-permissions",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:06:37.220Z",
+      "detail": {
+        "selectedModel": "deepseek-official/deepseek-flash",
+        "coordinatorPermission": "read-only"
+      },
+      "durationMs": 2738
+    },
+    {
+      "name": "custom-instruction-protection",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:06:39.960Z",
+      "durationMs": 2581
+    },
+    {
+      "name": "appearance-switch-and-restore",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:06:42.544Z",
+      "durationMs": 416
+    },
+    {
+      "name": "draft-survives-reload",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:06:42.961Z",
+      "durationMs": 5828
+    },
+    {
+      "name": "narrow-builder-and-keyboard",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:06:48.793Z",
+      "detail": {
+        "clientWidth": 302,
+        "scrollWidth": 302,
+        "left": 88,
+        "right": 390,
+        "viewportWidth": 390,
+        "bodyWidth": 390
+      },
+      "durationMs": 878
+    },
+    {
+      "name": "review-and-return-to-edit",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:06:49.675Z",
+      "durationMs": 1452
+    },
+    {
+      "name": "create-team-through-ui",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:06:51.132Z",
+      "durationMs": 3546
+    },
+    {
+      "name": "dashboard-and-persisted-settings",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:06:54.681Z",
+      "durationMs": 11808
+    },
+    {
+      "name": "team-inbox-and-mobile-navigation",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:07:06.490Z",
+      "detail": {
+        "tablet": {
+          "clientWidth": 488,
+          "scrollWidth": 488,
+          "left": 280,
+          "right": 768,
+          "viewportWidth": 768,
+          "bodyWidth": 768
+        },
+        "phone": {
+          "clientWidth": 302,
+          "scrollWidth": 302,
+          "left": 88,
+          "right": 390,
+          "viewportWidth": 390,
+          "bodyWidth": 390
+        }
+      },
+      "durationMs": 3834
+    },
+    {
+      "name": "browser-errors-and-dormant-members",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:07:10.329Z",
+      "durationMs": 2
+    }
+  ],
+  "screenshots": [
+    "01-builder-desktop.png",
+    "02-custom-instruction-review.png",
+    "03-builder-mobile.png",
+    "04-inspector-mobile.png",
+    "05-review-desktop.png",
+    "06-creation-result.png",
+    "07-dashboard-desktop.png",
+    "08-persisted-member-settings.png",
+    "09-inbox-desktop.png",
+    "10-dashboard-tablet.png",
+    "11-teams-mobile.png",
+    "12-inbox-mobile.png",
+    "13-dashboard-mobile.png"
+  ],
+  "pageErrors": [],
+  "consoleErrors": [],
+  "requestFailures": [
+    {
+      "url": "http://127.0.0.1:44174/api/session/projections",
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "url": "http://127.0.0.1:44174/api/session/projections",
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "url": "http://127.0.0.1:44174/api/session/projections",
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "url": "http://127.0.0.1:44174/api/session/projections",
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "url": "http://127.0.0.1:44174/api/session/projections",
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "url": "http://127.0.0.1:44174/api/session/projections",
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "url": "http://127.0.0.1:44174/api/session/projections",
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "url": "http://127.0.0.1:44174/api/session/projections",
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "url": "http://127.0.0.1:44174/api/session/projections",
+      "error": "net::ERR_ABORTED"
+    }
+  ],
+  "limits": [
+    "Uses the scripted mock model, not a paid provider.",
+    "Does not submit a goal or simulate approval/recovery failures.",
+    "Screenshots still require a human or agent visual comparison."
+  ],
+  "mockCallsBefore": 0,
+  "coordinatorExploration": "open",
+  "mockCallsAfter": 0,
+  "finishedAt": "2026-11-12T10:07:10.817Z"
+}

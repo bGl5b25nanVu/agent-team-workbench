@@ -1,0 +1,285 @@
+{
+  "status": "passed",
+  "startedAt": "2026-11-12T10:27:13.646Z",
+  "previousFlow": "/workspace/gongzuo-resume-20261112/evidence/final-ui/result.json",
+  "commit": "5fd34ac846aa7a51787f3adf232f363e1fd24fb0",
+  "teamName": "UI verification mwdeenkp",
+  "coordinatorName": "Coordinator mwdeenkp",
+  "bench": "gongzuo-final-ui",
+  "origin": "http://127.0.0.1:44175",
+  "browser": "/usr/bin/google-chrome",
+  "steps": [
+    {
+      "name": "validate-existing-isolated-team",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:27:13.676Z",
+      "detail": {
+        "existingGoal": true,
+        "members": [
+          {
+            "name": "Coordinator mwdeenkp",
+            "dormant": false
+          },
+          {
+            "name": "Researcher mwdeenkp",
+            "dormant": true
+          },
+          {
+            "name": "Engineer mwdeenkp",
+            "dormant": true
+          },
+          {
+            "name": "Designer mwdeenkp",
+            "dormant": true
+          },
+          {
+            "name": "Tester mwdeenkp",
+            "dormant": true
+          },
+          {
+            "name": "Operator mwdeenkp",
+            "dormant": true
+          }
+        ]
+      },
+      "durationMs": 11
+    },
+    {
+      "name": "authenticate-and-open-created-team",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:27:13.689Z",
+      "durationMs": 9470
+    },
+    {
+      "name": "submit-first-goal-through-ui",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:27:23.162Z",
+      "detail": {
+        "submittedThisRun": false
+      },
+      "durationMs": 0
+    },
+    {
+      "name": "only-coordinator-starts-for-first-goal",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:27:23.163Z",
+      "detail": {
+        "calls": [
+          {
+            "at": "2026-11-12T10:22:11.293Z",
+            "tokens": 26070,
+            "owner": "coordinator-group",
+            "tools": []
+          }
+        ],
+        "counts": {
+          "coordinator-group": 1
+        },
+        "members": [
+          {
+            "name": "Coordinator mwdeenkp",
+            "dormant": false
+          },
+          {
+            "name": "Researcher mwdeenkp",
+            "dormant": true
+          },
+          {
+            "name": "Engineer mwdeenkp",
+            "dormant": true
+          },
+          {
+            "name": "Designer mwdeenkp",
+            "dormant": true
+          },
+          {
+            "name": "Tester mwdeenkp",
+            "dormant": true
+          },
+          {
+            "name": "Operator mwdeenkp",
+            "dormant": true
+          }
+        ],
+        "goalStatus": "drafting"
+      },
+      "durationMs": 3327
+    },
+    {
+      "name": "ask-a-real-question-in-coordinator-chat",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:27:26.490Z",
+      "durationMs": 6959
+    },
+    {
+      "name": "inbox-opens-the-question-conversation",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:27:33.449Z",
+      "durationMs": 636
+    },
+    {
+      "name": "answer-question-and-clear-inbox",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:27:34.088Z",
+      "durationMs": 5727
+    },
+    {
+      "name": "verify-remaining-members-and-browser-errors",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:27:39.816Z",
+      "detail": {
+        "members": [
+          {
+            "name": "Coordinator mwdeenkp",
+            "dormant": false
+          },
+          {
+            "name": "Researcher mwdeenkp",
+            "dormant": true
+          },
+          {
+            "name": "Engineer mwdeenkp",
+            "dormant": true
+          },
+          {
+            "name": "Designer mwdeenkp",
+            "dormant": true
+          },
+          {
+            "name": "Tester mwdeenkp",
+            "dormant": true
+          },
+          {
+            "name": "Operator mwdeenkp",
+            "dormant": true
+          }
+        ],
+        "modelCallsThisRun": 4
+      },
+      "durationMs": 5
+    }
+  ],
+  "screenshots": [
+    "01-existing-team.png",
+    "03-goal-drafting-dashboard.png",
+    "04-real-question-card.png",
+    "05-question-inbox.png",
+    "06-inbox-keeps-question-pending.png",
+    "07-question-opened-from-inbox.png",
+    "08-answered-question.png",
+    "09-inbox-after-answer.png"
+  ],
+  "pageErrors": [],
+  "consoleErrors": [],
+  "coverage": {
+    "goalSubmission": "previously-submitted: matching test goal preserved; no duplicate submission",
+    "coordinatorOnlyDispatch": "passed",
+    "questionCreation": "passed",
+    "inboxNavigation": "passed",
+    "questionAnswer": "passed",
+    "goalPlanningAndStages": "not-covered: the existing mock does not call group_goal to plan or progress stages",
+    "permissionApproval": "not-covered: the existing escalation fixture asks for full-access shell execution; this test does not expand permissions",
+    "realProviderQuality": "not-covered: scripted mock model only"
+  },
+  "goalAlreadySubmitted": true,
+  "firstGoalEvidence": {
+    "calls": [
+      {
+        "at": "2026-11-12T10:22:11.293Z",
+        "tokens": 26070,
+        "owner": "coordinator-group",
+        "tools": []
+      }
+    ],
+    "counts": {
+      "coordinator-group": 1
+    },
+    "members": [
+      {
+        "name": "Coordinator mwdeenkp",
+        "dormant": false
+      },
+      {
+        "name": "Researcher mwdeenkp",
+        "dormant": true
+      },
+      {
+        "name": "Engineer mwdeenkp",
+        "dormant": true
+      },
+      {
+        "name": "Designer mwdeenkp",
+        "dormant": true
+      },
+      {
+        "name": "Tester mwdeenkp",
+        "dormant": true
+      },
+      {
+        "name": "Operator mwdeenkp",
+        "dormant": true
+      }
+    ],
+    "goalStatus": "drafting"
+  },
+  "answerEvidence": {
+    "questionId": "0fc50384-0047-4e20-9f5b-0142ae55bf7f",
+    "callId": "call-7-0",
+    "selectedAnswer": "改标题",
+    "receivedAnswer": {
+      "id": "0fc50384-0047-4e20-9f5b-0142ae55bf7f",
+      "question": "接下来先做哪个？",
+      "selected": [
+        "改标题"
+      ],
+      "customPresent": false
+    },
+    "calls": [
+      {
+        "at": "2026-11-12T10:27:34.280Z",
+        "tokens": 25184,
+        "owner": "coordinator-private",
+        "tools": []
+      },
+      {
+        "at": "2026-11-12T10:27:36.613Z",
+        "tokens": 1323,
+        "owner": "coordinator-private-memory-review",
+        "tools": []
+      }
+    ]
+  },
+  "newCalls": [
+    {
+      "at": "2026-11-12T10:27:27.524Z",
+      "tokens": 24929,
+      "owner": "coordinator-private",
+      "tools": [
+        "ask_user"
+      ]
+    },
+    {
+      "at": "2026-11-12T10:27:30.304Z",
+      "tokens": 1314,
+      "owner": "coordinator-private-memory-review",
+      "tools": []
+    },
+    {
+      "at": "2026-11-12T10:27:34.280Z",
+      "tokens": 25184,
+      "owner": "coordinator-private",
+      "tools": []
+    },
+    {
+      "at": "2026-11-12T10:27:36.613Z",
+      "tokens": 1323,
+      "owner": "coordinator-private-memory-review",
+      "tools": []
+    }
+  ],
+  "callCounts": {
+    "coordinator-private": 2,
+    "coordinator-private-memory-review": 2
+  },
+  "finishedAt": "2026-11-12T10:27:39.940Z"
+}

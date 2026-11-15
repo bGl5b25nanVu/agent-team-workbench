@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { DICTIONARY, LANGUAGES, dateLocale, hostText, installLocale, language, t } from '../src/client/i18n.js'
+import { DICTIONARY, LANGUAGES, dateLocale, hostText, installLocale, language, productText, t } from '../src/client/i18n.js'
 
 function fakeLocale(initial = 'zh') {
   let active = initial
@@ -56,7 +56,7 @@ test('every literal the client translates has an entry in all supported locales'
   const locales = ['zh', 'zh-TW', 'ja', 'ko', 'es', 'fr', 'de']
   for (const name of readdirSync(dir).filter(file => file.endsWith('.js'))) {
     const text = readFileSync(new URL(name, dir), 'utf8')
-    for (const match of text.matchAll(/\bt\(\s*(['"])((?:\\.|(?!\1).)*)\1/g)) {
+    for (const match of text.matchAll(/\b(?:t|productText)\(\s*(['"])((?:\\.|(?!\1).)*)\1/g)) {
       const key = match[2].replace(/\\'/g, "'")
       for (const loc of locales) {
         if (!Object.hasOwn(DICTIONARY[loc] ?? {}, key)) missing.push(`${loc}:${name}: ${key}`)
@@ -115,4 +115,18 @@ test('copy follows the DSH language across all locales and stays English without
   }
   assert.equal(t('Model'), 'Model')
   assert.equal(hostText('A Bot named Writer already exists'), 'A Bot named Writer already exists')
+})
+
+
+test('product copy follows the new brand without changing interpolated names', () => {
+  assert.equal(productText('DS Bot {version}', { version: 'DS Bot migration' }), 'Gongzuo DS Bot migration')
+  const mock = fakeLocale('zh')
+  const off = installLocale(mock)
+  try {
+    assert.equal(productText('DS Bot {version}', { version: '1.0' }), '共作 1.0')
+    mock.setActive('zh-TW')
+    assert.equal(productText('About DS Bot'), '關於 共作')
+    mock.setActive('fr')
+    assert.equal(productText('DS Bot {version}', { version: '1.0' }), 'Gongzuo 1.0')
+  } finally { off() }
 })

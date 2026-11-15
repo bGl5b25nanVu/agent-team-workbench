@@ -92,6 +92,8 @@ export function install(rt) {
   }
 
   // A group's preset, or null when each member uses its own.
+  const cleanBotPermission = name => checkPreset(name, 'a Bot\'s')
+
   const cleanRoomPermission = name => (name === null || name === '' ? null : checkPreset(name, 'a group\'s'))
 
   // Members' Sessions in the group change now; a member that has none there yet gets the
@@ -113,5 +115,5 @@ export function install(rt) {
     return true
   }
 
-  Object.assign(rt, { permissionCatalog, applyPermission, setPermission, cleanRoomPermission, setRoomPermission })
+  Object.assign(rt, { permissionCatalog, applyPermission, setPermission, cleanBotPermission, cleanRoomPermission, setRoomPermission })
 }

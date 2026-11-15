@@ -13,6 +13,9 @@ import * as handoffs from './src/host/handoffs.js'
 import * as requests from './src/host/requests.js'
 import * as delivery from './src/host/delivery.js'
 import * as roster from './src/host/roster.js'
+import * as teamCreation from './src/host/team-creation.js'
+import * as teamAssets from './src/host/team-assets.js'
+import { BRAND } from './src/shared/branding.js'
 import * as folders from './src/host/folders.js'
 import * as privacy from './src/host/privacy.js'
 import * as agents from './src/host/agents.js'
@@ -60,7 +63,7 @@ export const inject = ['llm', 'tools', 'systemPrompt', 'sessionController', 'ses
 // install. Listeners run and tools are listed in registration order, so this order holds:
 // usage meters model requests after every listener that rewrites them. privacy checks a
 // call before the hooks of tools do, so a closed call never reaches a card they show.
-const MODULES = [diagnostics, store, ledger, models, providers, permissions, turns, steer, handoffs, requests, delivery, roster, folders, privacy, agents, prompt, timeContext, tools, chatIndex, groups, goals, approvals, resume, memory, parts, images, avatarLibrary, secrets, connectors, capabilities, learning, schedules, browser, browserPlugins, computer, usage, update, dshUpdate, thinking, mobile, feed, phone, im, channel, officeSkills, goalSkills, localAgents]
+const MODULES = [diagnostics, store, ledger, models, providers, permissions, turns, steer, handoffs, requests, delivery, roster, teamCreation, teamAssets, folders, privacy, agents, prompt, timeContext, tools, chatIndex, groups, goals, approvals, resume, memory, parts, images, avatarLibrary, secrets, connectors, capabilities, learning, schedules, browser, browserPlugins, computer, usage, update, dshUpdate, thinking, mobile, feed, phone, im, channel, officeSkills, goalSkills, localAgents]
 
 export function apply(ctx, config = {}) {
   createRuntime(ctx, config)
@@ -79,8 +82,8 @@ export function createRuntime(ctx, config = {}) {
     // Bot Session's own scope, never globally (see shareBotTools).
     teamTools: [],
     defaults: {
-      mainName: config.mainName ?? 'Chief',
-      mainRole: config.mainRole ?? 'Chief of Staff',
+      mainName: config.mainName ?? BRAND.coordinatorName,
+      mainRole: config.mainRole ?? BRAND.coordinatorRole,
     },
   }
   for (const module of MODULES) module.install(rt)

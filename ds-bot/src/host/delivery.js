@@ -84,8 +84,12 @@ export function install(rt) {
     const from = rt.botOf(fromId)
     const to = rt.botOf(toId)
     if (to === undefined) throw new Error(`Unknown Bot ${toId}`)
+    if (to.dormant === true && (role === 'kickoff' || role === 'update')) return
     const fromName = senderName ?? from?.name ?? 'You'
     const room = rt.roomOf(roomId)
+    if (room?.creationIncomplete === true) throw new Error('Finish creating this team before starting work')
+    const targetSessionId = sessionId ?? rt.chatOf(toId)
+    await rt.activateTeamBot?.(to.id, targetSessionId)
     const asker = work === undefined ? undefined : rt.botOf(state.works?.[work]?.from)?.name
     // Session events reject `undefined` members, so optional fields are omitted instead.
     const source = {
@@ -106,7 +110,6 @@ export function install(rt) {
       ...(fromRoomId ? { senderRoomId: fromRoomId } : {}),
       ...(abandoned ? { abandoned: true } : {}),
     }
-    const targetSessionId = sessionId ?? rt.chatOf(toId)
     // On disk before it goes out: a message the book could not keep is not sent, so none is
     // delivered with no record of it. A resend keeps the record it has; only a merged request
     // replaces it with its added text.

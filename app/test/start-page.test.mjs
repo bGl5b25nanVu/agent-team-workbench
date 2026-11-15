@@ -8,10 +8,19 @@ import { langOf, TEXT, t } from '../src/start/text.mjs'
 
 const dir = new URL('../src/start/', import.meta.url)
 const read = name => readFileSync(new URL(name, dir), 'utf8')
-const SCRIPTS = ['start.js', 'whale.js', 'text.mjs']
+const SCRIPTS = ['start.js', 'whale.js', 'text.mjs', 'brand.mjs']
 const html = read('start.html')
 const code = Object.fromEntries(SCRIPTS.map(name => [name, read(name)]))
 const uncommented = text => text.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//gu, '')
+
+test('the start page ships the original elephant and brand PNG without a vector mascot', () => {
+  for (const name of ['coordinator-elephant.png', 'brand-mark.png']) {
+    assert.deepEqual(readFileSync(new URL(name, dir)), readFileSync(new URL(`../../docs/design/assets/gongzuo/${name}`, import.meta.url)))
+  }
+  assert.match(html, /<img class="coordinator-image" src="coordinator-elephant\.png"/u)
+  assert.doesNotMatch(code['whale.js'], /\$\('#(?:tail|eye-pair|gaze)'\)|querySelectorAll\('\.(?:bt-eye|bt-eye-happy)'\)/u)
+  assert.doesNotMatch(read('start.css'), /#tail|#eye-pair|\.whale-svg/u)
+})
 
 test('the start page runs under its CSP: no inline style or script, no data: or network URLs', () => {
   assert.ok(html.includes(`<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'">`), 'the CSP meta is missing or changed')
@@ -37,7 +46,7 @@ test('every file the page loads is relative and inside src/start', () => {
     assert.ok(existsSync(new URL(url, dir)), `${from} loads ${url}, which is missing`)
   }
   const loads = [...html.matchAll(/\s(?:src|href)="([^"#][^"]*)"/gu)].map(match => match[1])
-  assert.deepEqual(loads, ['start.css', 'start.js'])
+  assert.deepEqual(loads, ['start.css', 'start.js', 'brand-mark.png', 'coordinator-elephant.png'])
   assert.match(html, /<script type="module" src="start.js"><\/script>/u)
   for (const url of loads) inside('start.html', url)
   for (const [name, text] of Object.entries(code)) {
@@ -107,8 +116,9 @@ test('the start page draws the progress as a ring of three or four arcs and a cl
   // The hidden stage list has the import's stage too, shown only on such a start.
   assert.match(html, /<li class="station" data-phase="data"[^>]*>.*\r?\n<li class="station" data-phase="import" data-state="pending" hidden>.*\r?\n<li class="station" data-phase="engine"/u)
   assert.equal(html.match(/<circle class="ring-full" cx="110" cy="110" r="106" pathLength="100" transform="rotate\(-90 110 110\)"\/>/gu)?.length, 1)
-  // The ring, the water, the whale and its hit box move as one block when a card comes.
-  assert.match(html, /<div class="pond">\r?\n<svg class="ring"[\s\S]*?<div class="water"[\s\S]*?<div class="lane">[\s\S]*?<span class="spout"><svg class="plume"[^>]*\shidden>[\s\S]*?<div class="whale-hit"[\s\S]*?<div class="fx" aria-hidden="true"><span class="ripple"><\/span><\/div>\r?\n<\/div>/u)
+  // The original elephant image, progress ring and hit box move together on cards.
+  assert.match(html, /<div class="pond">\r?\n<svg class="ring"[\s\S]*?<div class="lane">[\s\S]*?<img class="coordinator-image"[\s\S]*?<div class="whale-hit"[\s\S]*?<\/div>\r?\n<\/div>/u)
+  assert.doesNotMatch(html, /class="(?:water|spout|plume|whale-svg)"|id="(?:tail|eye-pair|gaze)"/u)
   assert.doesNotMatch(html, /class="(?:trace|elapsed)"/u)
   // The layer the whale flies in to the Main Bot's avatar at the hand-off (whale.js leap), and
   // the whale's box at the top of its jump, which the team page takes over.
@@ -333,7 +343,7 @@ test('a button that opens the system picker ends with …', () => {
 
 // docs/plans/2026-10-26-windows-onboarding.md, 用词: proper names and units only.
 test('the zh copy shows no English but the allowed names and units', () => {
-  const NAMES = ['DS Bot', 'DSH Desktop', 'DSH Web']
+  const NAMES = ['共作', 'DSH Desktop', 'DSH Web']
   const WORDS = new Set(['DeepSeek', 'Bot', 'API', 'Key', 'Harness', 'DSH', 'Agent', 'MCP', 'Windows', 'PowerShell', 'GitHub', 'SmartScreen', 'OneDrive', 'cookie', 'HTTP', 'SOCKS', 'KB', 'MB', 'GB'])
   const english = []
   for (const [key, value] of Object.entries(TEXT.zh)) {
