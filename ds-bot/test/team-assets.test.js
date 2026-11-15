@@ -59,7 +59,10 @@ test('artwork GET and HEAD cross the authenticated DSH HTTP bridge', async t => 
       if (ctx.connection.authorizeIndex(request, response)) response.end('ready')
     },
   })
-  const origin = ctx.webServer.getOrigin()
+  // Older supported DSH releases expose host/port but not getOrigin().
+  const origin = typeof ctx.webServer.getOrigin === 'function'
+    ? ctx.webServer.getOrigin()
+    : `http://127.0.0.1:${ctx.webServer.port}`
   const login = await fetch(ctx.connection.authenticatedUrl(`${origin}/`), { redirect: 'manual' })
   assert.equal(login.status, 303)
   const cookie = login.headers.get('set-cookie')?.split(';')[0]

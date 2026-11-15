@@ -253,6 +253,15 @@ jobs:
           if (Find-Entry 'HKCU:') { throw 'The uninstaller left its uninstall entry' }
           foreach ($file in $kept) { if (-not (Test-Path $file)) { throw "The uninstaller removed $file" } }
 
+      - name: Upload verified Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gongzuo-windows-x64
+          path: app/dist-pack/DS-Bot-*-win-x64.exe
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
   app-package-macos:
     name: Desktop app package (macOS ${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
@@ -329,6 +338,15 @@ jobs:
           file -b "$exe" | grep -F "$expected"
           node scripts/check-packed.mjs "$exe"
           node scripts/check-update.mjs "$exe" 99.0.0
+
+      - name: Upload verified macOS archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gongzuo-macos-${{ matrix.arch }}
+          path: app/dist-pack/DS-Bot-*-mac-${{ matrix.arch }}.zip
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
 
   app-package-linux:
     name: Desktop app package (Linux x64)
@@ -430,6 +448,18 @@ jobs:
         run: |
           sudo apt-get remove -y dsbot
           test ! -e "/opt/Gongzuo/dsbot"
+
+      - name: Upload verified Linux packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gongzuo-linux-x64
+          path: |
+            app/dist-pack/DS-Bot-*-linux-x86_64.AppImage
+            app/dist-pack/DS-Bot-*-linux-amd64.deb
+            app/dist-pack/latest-linux.yml
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
 
   docker:
     name: Docker startup and data migration
