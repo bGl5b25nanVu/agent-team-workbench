@@ -1,0 +1,48 @@
+{
+  "status": "passed",
+  "commit": "06705a1237f8bbc55ec9f76b14e2e018f86845da",
+  "startedAt": "2026-11-17T11:38:33.027Z",
+  "viewport": {
+    "width": 1487,
+    "height": 1058
+  },
+  "themes": [
+    {
+      "scheme": "light",
+      "background": "rgb(251, 252, 255)",
+      "text": "rgb(23, 29, 43)",
+      "imageFrames": [
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none"
+      ],
+      "reducedMotion": true
+    },
+    {
+      "scheme": "dark",
+      "background": "rgb(17, 23, 34)",
+      "text": "rgb(237, 241, 250)",
+      "imageFrames": [
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none"
+      ],
+      "reducedMotion": true
+    }
+  ],
+  "screenshots": [
+    "light-builder.png",
+    "member-inspector.png",
+    "mobile-builder.png",
+    "mobile-footer.png",
+    "dark-builder.png"
+  ],
+  "errors": [],
+  "finishedAt": "2026-11-17T11:38:39.393Z"
+}

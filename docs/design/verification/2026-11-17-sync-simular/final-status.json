@@ -1,0 +1,100 @@
+{
+  "commit": "06705a1237f8bbc55ec9f76b14e2e018f86845da",
+  "status": "passed",
+  "stages": [
+    {
+      "name": "dependencies",
+      "status": "passed",
+      "started": 1794915020.4903214,
+      "exitCode": 0,
+      "seconds": 165.1
+    },
+    {
+      "name": "plugin-build",
+      "status": "passed",
+      "started": 1794915185.6485124,
+      "exitCode": 0,
+      "seconds": 1.9
+    },
+    {
+      "name": "plugin-lint",
+      "status": "passed",
+      "started": 1794915187.5511947,
+      "exitCode": 0,
+      "seconds": 1.2
+    },
+    {
+      "name": "plugin-tests",
+      "status": "passed",
+      "started": 1794915188.7687056,
+      "exitCode": 0,
+      "seconds": 95.6
+    },
+    {
+      "name": "app-tests",
+      "status": "passed",
+      "started": 1794915284.3742208,
+      "exitCode": 0,
+      "seconds": 37.2
+    },
+    {
+      "name": "app-build",
+      "status": "passed",
+      "started": 1794915321.5596042,
+      "exitCode": 0,
+      "seconds": 2.5
+    },
+    {
+      "name": "mobile-checks",
+      "status": "passed",
+      "started": 1794915324.10469,
+      "exitCode": 0,
+      "seconds": 8.2
+    },
+    {
+      "name": "bench",
+      "status": "passed",
+      "started": 1794915452.419521,
+      "exitCode": 0,
+      "seconds": 6.3
+    },
+    {
+      "name": "team-ui",
+      "status": "passed",
+      "started": 1794915458.706567,
+      "exitCode": 0,
+      "seconds": 25.9
+    },
+    {
+      "name": "task-ui",
+      "status": "passed",
+      "started": 1794915484.5996435,
+      "exitCode": 0,
+      "seconds": 28.0
+    },
+    {
+      "name": "visual-ui",
+      "status": "passed",
+      "started": 1794915512.6076663,
+      "exitCode": 0,
+      "seconds": 6.8
+    },
+    {
+      "name": "smoke-reset",
+      "status": "passed",
+      "started": 1794915546.3082974,
+      "exitCode": 0,
+      "seconds": 9.8
+    },
+    {
+      "name": "smoke",
+      "status": "passed",
+      "started": 1794915556.0667286,
+      "exitCode": 0,
+      "seconds": 289.0
+    }
+  ],
+  "stopped": true,
+  "upstream": "a95e3af4a3a2d599bff85e8eef9462dfe661abab",
+  "environment": "Simular main, Ubuntu 24.04, Node 24.21.0, Google Chrome, DSH 0.2.2-rc.1"
+}

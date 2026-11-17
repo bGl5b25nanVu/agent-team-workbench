@@ -1,0 +1,314 @@
+{
+  "status": "passed",
+  "startedAt": "2026-11-17T11:38:05.509Z",
+  "previousFlow": "/workspace/gongzuo-sync-20261117/evidence/team-ui/result.json",
+  "commit": "06705a1237f8bbc55ec9f76b14e2e018f86845da",
+  "teamName": "UI verification mwkmbk51",
+  "coordinatorName": "Coordinator mwkmbk51",
+  "bench": "simular-sync",
+  "origin": "http://127.0.0.1:4196",
+  "browser": "/usr/bin/google-chrome",
+  "steps": [
+    {
+      "name": "validate-existing-isolated-team",
+      "status": "passed",
+      "startedAt": "2026-11-17T11:38:05.662Z",
+      "detail": {
+        "existingGoal": false,
+        "members": [
+          {
+            "name": "Coordinator mwkmbk51",
+            "dormant": true
+          },
+          {
+            "name": "Researcher mwkmbk51",
+            "dormant": true
+          },
+          {
+            "name": "Engineer mwkmbk51",
+            "dormant": true
+          },
+          {
+            "name": "Designer mwkmbk51",
+            "dormant": true
+          },
+          {
+            "name": "Tester mwkmbk51",
+            "dormant": true
+          },
+          {
+            "name": "Operator mwkmbk51",
+            "dormant": true
+          }
+        ]
+      },
+      "durationMs": 4
+    },
+    {
+      "name": "authenticate-and-open-created-team",
+      "status": "passed",
+      "startedAt": "2026-11-17T11:38:05.668Z",
+      "durationMs": 4348
+    },
+    {
+      "name": "submit-first-goal-through-ui",
+      "status": "passed",
+      "startedAt": "2026-11-17T11:38:10.017Z",
+      "detail": {
+        "submittedThisRun": true
+      },
+      "durationMs": 2019
+    },
+    {
+      "name": "only-coordinator-starts-for-first-goal",
+      "status": "passed",
+      "startedAt": "2026-11-17T11:38:12.037Z",
+      "detail": {
+        "calls": [
+          {
+            "at": "2026-11-17T11:38:13.569Z",
+            "tokens": 27297,
+            "owner": "coordinator-group",
+            "tools": []
+          },
+          {
+            "at": "2026-11-17T11:38:15.931Z",
+            "tokens": 1331,
+            "owner": "group-memory-review",
+            "tools": []
+          }
+        ],
+        "counts": {
+          "coordinator-group": 1,
+          "group-memory-review": 1
+        },
+        "members": [
+          {
+            "name": "Coordinator mwkmbk51",
+            "dormant": false
+          },
+          {
+            "name": "Researcher mwkmbk51",
+            "dormant": true
+          },
+          {
+            "name": "Engineer mwkmbk51",
+            "dormant": true
+          },
+          {
+            "name": "Designer mwkmbk51",
+            "dormant": true
+          },
+          {
+            "name": "Tester mwkmbk51",
+            "dormant": true
+          },
+          {
+            "name": "Operator mwkmbk51",
+            "dormant": true
+          }
+        ],
+        "goalStatus": "drafting"
+      },
+      "durationMs": 7277
+    },
+    {
+      "name": "ask-a-real-question-in-coordinator-chat",
+      "status": "passed",
+      "startedAt": "2026-11-17T11:38:19.315Z",
+      "durationMs": 6719
+    },
+    {
+      "name": "inbox-opens-the-question-conversation",
+      "status": "passed",
+      "startedAt": "2026-11-17T11:38:26.034Z",
+      "durationMs": 500
+    },
+    {
+      "name": "answer-question-and-clear-inbox",
+      "status": "passed",
+      "startedAt": "2026-11-17T11:38:26.536Z",
+      "durationMs": 5941
+    },
+    {
+      "name": "verify-remaining-members-and-browser-errors",
+      "status": "passed",
+      "startedAt": "2026-11-17T11:38:32.478Z",
+      "detail": {
+        "members": [
+          {
+            "name": "Coordinator mwkmbk51",
+            "dormant": false
+          },
+          {
+            "name": "Researcher mwkmbk51",
+            "dormant": true
+          },
+          {
+            "name": "Engineer mwkmbk51",
+            "dormant": true
+          },
+          {
+            "name": "Designer mwkmbk51",
+            "dormant": true
+          },
+          {
+            "name": "Tester mwkmbk51",
+            "dormant": true
+          },
+          {
+            "name": "Operator mwkmbk51",
+            "dormant": true
+          }
+        ],
+        "modelCallsThisRun": 6
+      },
+      "durationMs": 6
+    }
+  ],
+  "screenshots": [
+    "01-existing-team.png",
+    "02-first-goal-compose.png",
+    "03-goal-drafting-dashboard.png",
+    "04-real-question-card.png",
+    "05-question-inbox.png",
+    "06-inbox-keeps-question-pending.png",
+    "07-question-opened-from-inbox.png",
+    "08-answered-question.png",
+    "09-inbox-after-answer.png"
+  ],
+  "pageErrors": [],
+  "consoleErrors": [],
+  "coverage": {
+    "goalSubmission": "passed",
+    "coordinatorOnlyDispatch": "passed",
+    "questionCreation": "passed",
+    "inboxNavigation": "passed",
+    "questionAnswer": "passed",
+    "goalPlanningAndStages": "not-covered: the existing mock does not call group_goal to plan or progress stages",
+    "permissionApproval": "not-covered: the existing escalation fixture asks for full-access shell execution; this test does not expand permissions",
+    "realProviderQuality": "not-covered: scripted mock model only"
+  },
+  "goalAlreadySubmitted": false,
+  "firstGoalEvidence": {
+    "calls": [
+      {
+        "at": "2026-11-17T11:38:13.569Z",
+        "tokens": 27297,
+        "owner": "coordinator-group",
+        "tools": []
+      },
+      {
+        "at": "2026-11-17T11:38:15.931Z",
+        "tokens": 1331,
+        "owner": "group-memory-review",
+        "tools": []
+      }
+    ],
+    "counts": {
+      "coordinator-group": 1,
+      "group-memory-review": 1
+    },
+    "members": [
+      {
+        "name": "Coordinator mwkmbk51",
+        "dormant": false
+      },
+      {
+        "name": "Researcher mwkmbk51",
+        "dormant": true
+      },
+      {
+        "name": "Engineer mwkmbk51",
+        "dormant": true
+      },
+      {
+        "name": "Designer mwkmbk51",
+        "dormant": true
+      },
+      {
+        "name": "Tester mwkmbk51",
+        "dormant": true
+      },
+      {
+        "name": "Operator mwkmbk51",
+        "dormant": true
+      }
+    ],
+    "goalStatus": "drafting"
+  },
+  "answerEvidence": {
+    "questionId": "59b73cdd-b9c2-4401-a608-054f60cb7718",
+    "callId": "call-3-0",
+    "selectedAnswer": "改标题",
+    "receivedAnswer": {
+      "id": "59b73cdd-b9c2-4401-a608-054f60cb7718",
+      "question": "接下来先做哪个？",
+      "selected": [
+        "改标题"
+      ],
+      "customPresent": false
+    },
+    "calls": [
+      {
+        "at": "2026-11-17T11:38:26.885Z",
+        "tokens": 26098,
+        "owner": "coordinator-private",
+        "tools": []
+      },
+      {
+        "at": "2026-11-17T11:38:29.228Z",
+        "tokens": 1286,
+        "owner": "coordinator-private-memory-review",
+        "tools": []
+      }
+    ]
+  },
+  "newCalls": [
+    {
+      "at": "2026-11-17T11:38:13.569Z",
+      "tokens": 27297,
+      "owner": "coordinator-group",
+      "tools": []
+    },
+    {
+      "at": "2026-11-17T11:38:15.931Z",
+      "tokens": 1331,
+      "owner": "group-memory-review",
+      "tools": []
+    },
+    {
+      "at": "2026-11-17T11:38:20.210Z",
+      "tokens": 25842,
+      "owner": "coordinator-private",
+      "tools": [
+        "ask_user"
+      ]
+    },
+    {
+      "at": "2026-11-17T11:38:22.943Z",
+      "tokens": 1224,
+      "owner": "coordinator-private-memory-review",
+      "tools": []
+    },
+    {
+      "at": "2026-11-17T11:38:26.885Z",
+      "tokens": 26098,
+      "owner": "coordinator-private",
+      "tools": []
+    },
+    {
+      "at": "2026-11-17T11:38:29.228Z",
+      "tokens": 1286,
+      "owner": "coordinator-private-memory-review",
+      "tools": []
+    }
+  ],
+  "callCounts": {
+    "coordinator-group": 1,
+    "group-memory-review": 1,
+    "coordinator-private": 2,
+    "coordinator-private-memory-review": 2
+  },
+  "finishedAt": "2026-11-17T11:38:32.579Z"
+}
