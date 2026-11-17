@@ -142,6 +142,10 @@ npx @deepseek-ai/dsh@0.2.2-rc.1 web --no-open
 
 截图与结构化结果保存在 [本轮验证证据](docs/design/verification/2026-11-12-resume/)，其中 `before/` 是历史问题截图；`final-ui/`、`task-final/`、`visual-final/` 是本轮补验结果。
 
+Coding-agent CLIs you already use on your computer (Claude Code, Codex CLI, Cursor CLI, GitHub Copilot, Devin CLI, OpenCode, Gemini CLI, Antigravity, Kimi CLI, Kilo CLI, and others) can be connected as bots directly. Pick Local agent when creating a bot (or switch in the bot's settings), and it will use the CLI's own sign-in, plan and models while working like any other bot in private chats, group chats, handoffs and memory.
+
+There are a few limits to keep in mind: a local agent uses the CLI's own tools and context, so shared capabilities and connectors in DS Bot are not passed to it, and switching how a bot runs starts a fresh conversation part; only CLIs or custom CLIs that reject MCP servers altogether run without team tools such as creating bots or handing off work. Also, Cursor CLI saves the last selected model as its own global default (`~/.cursor`), so if you pick a specific model for a Cursor bot in DS Bot, other Cursor bots on the default model and Cursor in your terminal will switch to it too — keep "CLI default" if you don't want to change your global default (sign in to Cursor first so the model list loads).
+
 最终复核对照了选定方案与浅色建队页、成员检查器，并查看手机底栏、深色建队页、工作台和问题答复画面。六种角色形象完整且无方形边框，390px 手机底部操作不再重叠。实现保留实际产品导航、待办、聊天和更详细的运行设置，采用系统字体与更紧凑卡片；验收通过不代表逐像素复刻概念图。截图中的英文成员名来自测试输入。
 
 ### 本地预览

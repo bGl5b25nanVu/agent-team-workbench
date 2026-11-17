@@ -1,0 +1,54 @@
+name: Workbench integration
+
+on:
+  pull_request:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ds-bot
+        shell: bash
+    env:
+      CHROME_BIN: /usr/bin/google-chrome
+      CONTEXT_WINDOW: '100000'
+      CHECK_RATIO: '0.45'
+      GONGZUO_UI_OUTPUT: ${{ github.workspace }}/docs/design/verification/2026-11-17-sync/team-ui
+      GONGZUO_TASK_UI_OUTPUT: ${{ github.workspace }}/docs/design/verification/2026-11-17-sync/task-ui
+      GONGZUO_VISUAL_OUTPUT: ${{ github.workspace }}/docs/design/verification/2026-11-17-sync/visual-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --no-fund --no-audit
+      - run: npm ci --prefix ../link --no-fund --no-audit
+      - run: npm run harness
+      - run: npm install --global pnpm@10
+      - name: Build and start isolated mock runtime
+        run: |
+          npm run build
+          export DSH_TEST_CLI="$PWD/dev/harness/node_modules/.bin/dsh"
+          dev/bench.sh sync 3196 8896 reset
+      - name: Create and inspect the six-role team
+        run: node dev/team-ui-flow.mjs sync 3196
+      - name: Submit a goal and answer through the inbox
+        run: node dev/team-ui-task-flow.mjs "$GONGZUO_UI_OUTPUT/result.json"
+      - name: Inspect light, dark and mobile layouts
+        run: node dev/team-ui-visual.mjs sync 3196
+      - name: Stop the isolated runtime
+        if: always()
+        run: dev/bench.sh sync 3196 8896 stop
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: workbench-browser-evidence
+          path: docs/design/verification/2026-11-17-sync/
+          retention-days: 14

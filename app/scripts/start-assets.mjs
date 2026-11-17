@@ -17,10 +17,16 @@ const CARD_SCOPE = '.dsb-card-layer'
 const mascot = '<img class="coordinator-image" src="coordinator-elephant.png" width="1254" height="1254" alt="" aria-hidden="true" draggable="false">'
 
 const rules = css => [...css.matchAll(/\{([^}]*)\}/gu)].map(([, body]) => new Map(body.split(';').filter(Boolean).map(item => item.split(/:(.*)/su).slice(0, 2))))
+// The start page carries no skin variables, so a surface color that the app writes as
+// `var(--bt-skin-main, #fcfcfc)` is copied at its theme fallback here.
+const themeFallback = value => {
+  const wrapped = /^var\(\s*--[\w-]+\s*,\s*([\s\S]+)\)$/u.exec(value)
+  return wrapped === null ? value : wrapped[1].trim()
+}
 function pick(vars, names, from) {
   return names.map((name) => {
     if (!vars.has(name)) throw new Error(`${from} no longer sets ${name}`)
-    return `${name}:${vars.get(name)}`
+    return `${name}:${themeFallback(vars.get(name))}`
   }).join(';')
 }
 
