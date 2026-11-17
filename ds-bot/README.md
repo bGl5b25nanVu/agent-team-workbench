@@ -2,7 +2,7 @@
 
 Gongzuo (共作) is an agent team workspace forked from [Fei2411/DS-Bot](https://github.com/Fei2411/DS-Bot), built on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH). The `ds-bot` package name, `bot` plugin identity and existing data format remain compatible. The interface uses the Gongzuo name, a blue-and-white theme and a gray elephant coordinator.
 
-This is a local source implementation prepared on `feat/team-workbench`, not a published fork release. The complete implementation has not been pushed yet. Use the complete source directory and local package instructions below; upstream npm and release downloads do not contain this redesign. See the [Chinese project guide](../README.md) and the preserved [upstream overview](../README.upstream.md).
+This fork includes the Gongzuo team workspace and tracks DS-Bot development through upstream v0.3.8. Use the complete source directory and local package instructions below; upstream npm and release downloads do not contain this redesign. See the [Chinese project guide](../README.md) and the preserved [upstream overview](../README.upstream.md).
 
 The pinned DSH version is `0.2.2-rc.1`; its npm CLI requires Node.js `24.9.0` or later. Runtime checks with mock models do not establish the behavior of a real provider or an authenticated local CLI.
 
@@ -23,6 +23,8 @@ Actual DSH permission presets apply before new members start. The researcher pre
 **Current boundaries:** role responsibilities, independent review, evidence quality, exploration and file ownership are prompt conventions. There is no new server-enforced independent reviewer gate, automatic test runner at stage acceptance, hard cost budget, concurrent file lock or immutable role policy. See the [full protocol and implementation record](../docs/plans/2026-11-12-agent-team-workbench.md).
 
 New workspace copy is available in English, Simplified Chinese and Traditional Chinese. Its Japanese, Korean, Spanish, French and German entries explicitly fall back to English until reviewed; existing translations remain in place.
+
+Tested with dsh `0.2.2-rc.1` (Web and Desktop).
 
 ## Features
 
@@ -88,6 +90,19 @@ The first new Main Bot is called Coordinator and uses the elephant. Existing use
 
 **Upgrading from the legacy `dsh-bot` package:** remove that package before adding `ds-bot`, because both use plugin id `bot`. Back up the existing team first; the display rename does not migrate or delete its data. See [Data and backups](#data-and-backups).
 
+The first time the team opens, the plugin creates a Main Bot called Chief.
+
+**If DSH was upgraded and the Bot team does not start**: a profile can keep its own pinned copies of official DSH packages (for example `@deepseek-ai/dsh-web-app` at the version before the upgrade). DSH then mounts the new installation's rows against those older modules, disables the rows whose versions do not match, and a plugin that injects their services — the Bot team's `sessionController` and `workspaceRegistry` — stays pending. This is a diagnostic/repair tool you run by hand — DS Bot never invokes it on its own. The doctor names the pins the running DSH does not satisfy; `--fix` removes only those (a version range the running DSH satisfies is kept, and only DSH runtime/bundle packages are considered), then runs `pnpm install` in the changed profile so a restart needs no separate manual install. If that install cannot run, it prints the exact command. Chats, settings and credentials are not touched:
+
+```sh
+npx ds-bot doctor
+npx ds-bot doctor --fix
+```
+
+The doctor reads the profiles' `package.json` files only. If DSH still does not start after a clean report, an older copy may be a transitive dependency that another plugin brought into the profile; the report names `pnpm why @deepseek-ai/<package>` so you can find the plugin that carries it. The doctor never removes such a copy, because that would break the plugin that needs it.
+
+**Upgrading from the legacy `dsh-bot` package**: earlier builds used the package name `dsh-bot`. Remove `dsh-bot` from the profile before you add `ds-bot`, because both use the plugin id `bot`. Your team, chats and secrets stay where they are (see [Data and backups](#data-and-backups)); saved browser settings, the theme and Bot colors move over the first time DS Bot opens.
+
 ## Configuration
 
 Options go in the profile's `cordis.patch.yml`, under the `bot` entry. All of them are optional.
@@ -99,6 +114,7 @@ Options go in the profile's `cordis.patch.yml`, under the `bot` entry. All of th
     workspace: /path/to/workspace   # where the Bots work; default <home>/workspace
     home: /path/to/bot-data         # where the team is saved; default $DSH_HOME/bot
     checkRatio: 0.8                 # share of the model's usable window where the steward decides
+    checkTokens: 380000             # the highest context where it decides, even on a larger window
     browser: true                   # force the Bot browser on or off; default on in Desktop and the desktop app only
     memory: true                    # false turns memory off: no memory tools, section or panel
     memoryReview: true              # false leaves memory to the Bots' own remember calls
@@ -116,7 +132,7 @@ The same card can carry DSH itself: a DS Bot release may name the DSH release it
 
 Model providers are set up in DS Bot's **Settings → Models** (or the Main Bot's setup card) and stored through dsh's `llm-pi-ai` plugin in `cordis.patch.yml` and `.credentials.yaml`. Every Bot runs on one model of its own, from the models DSH serves. A new team's first Main Bot starts on a model card when more than one provider is ready or none is configured yet, and greets the user once a usable model is connected. **Settings → General → New Bots** can set a team default model for newly created Bots: the Create Bot form starts on that team default model when it is served and usable (otherwise the DSH default model, or the first usable model), and a Main Bot's `create_bot` without a named model uses the team default model before falling back to the creator's own model. The Bot's details panel and settings (or a Main Bot's `update_bot`) change a Bot's model; a Bot whose model is no longer served falls back to its last working model or shows the card again. A team saved by an older version keeps the model each Bot last ran on.
 
-- Give every model a `contextWindow`. DS Bot takes its lines from it: the usable window is the window minus the reply reserve (`maxTokens`), the hard line is 95% of that, and the check line is `checkRatio` of it. A model without `contextWindow` gets the adapter's default (262,144 tokens for `llm-pi-ai`), which may be wrong for that model; a model that reports no window at all counts as 500,000.
+- Give every model a `contextWindow`. DS Bot takes its lines from it: the usable window is the window minus the reply reserve (`maxTokens`), the hard line is 95% of that, and the check line is `checkRatio` of it, capped at `checkTokens` (default 380,000) so a huge window does not keep one part past the point where a provider's prefix cache stops helping. A model without `contextWindow` gets the adapter's default (262,144 tokens for `llm-pi-ai`), which may be wrong for that model; a model that reports no window at all counts as 500,000.
 - To send images, the provider needs `defaultInput: [ text, image ]`.
 - Keep API keys out of the repository. Use dsh's own key storage or environment variables.
 
@@ -202,6 +218,7 @@ When a Bot needs an API key, token or password, it calls `request_secret`, and a
 - **Masking**: before a tool result is saved and before each request goes to the model, every copy of a secret value is replaced with `[secret:<NAME>]`.
 - **Manage**: Settings → Secrets lists every secret by name, purpose, the Bot that asked and the last use. You can change who may use it, replace the value, delete it or add one. Deleting a Bot removes it from every secret.
 - **Storage**: `<DSH_HOME>/bot/secrets.json`, file mode 600, written atomically. Values are never in `state.json` or logs.
+- **Encryption at rest (optional)**: Settings → Secrets → Encryption at rest turns the same file into a passphrase-locked envelope (scrypt key, AES-256-GCM payload). An unattended start unlocks it with `DS_BOT_SECRETS_PASSPHRASE` or with `DS_BOT_SECRETS_PASSPHRASE_FILE` (a file with the passphrase); without either the store starts locked, the Secrets page says how to unlock it, and secret writes are refused. Plaintext stays the default and existing files need no migration.
 
 Limits:
 

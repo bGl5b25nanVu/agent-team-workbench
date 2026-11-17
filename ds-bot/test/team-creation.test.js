@@ -426,11 +426,12 @@ test('a removed model cannot silently activate a team member on another route', 
   const { rt, ctx, call, controls, requests, selections } = setup(t)
   const created = (await call('create-team', input())).value
   const bot = rt.botOf(created.members[0].botId)
+  const before = selections.length // The group's relay Session already has its own model.
   controls.models = [{ id: 'unrelated-default' }]
   await assert.rejects(ctx.sessionController.prompt({ sessionId: bot.id, content: [] }), /not available/)
   assert.equal(bot.dormant, true)
   assert.equal(requests.length, 0)
-  assert.equal(selections.length, 0)
+  assert.equal(selections.length, before)
 })
 
 test('a failed group model selection blocks activation and retries that same Session', async t => {
