@@ -1,6 +1,7 @@
 // Store: the saved team (state.json), its migrations, the lock that keeps a second dsh
 // host on the same data from writing it, and the indexes that map a Session to the Bot
 // or group chat it belongs to.
+import { createHash } from 'node:crypto'
 import { copyFileSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { mkdir, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -25,6 +26,10 @@ export function install(rt) {
   let loaded = null
   let storeReady = false
   let writing = Promise.resolve()
+  let pendingWrites = 0
+  let persistedDigest = null
+  let persistedRevision = null
+  const digest = contents => createHash('sha256').update(contents).digest('hex')
   const { warn } = rt
   const sessionIdOf = id => (typeof id === 'string' && id !== '' ? id : undefined)
 
@@ -73,6 +78,8 @@ export function install(rt) {
   // Synchronous on purpose: the saved team and the session indexes built from it
   // exist before the first tool or shell env call can resolve a Session.
   const readFileState = () => {
+    persistedDigest = null
+    persistedRevision = null
     let contents
     try {
       contents = readFileSync(statePath, 'utf8')
@@ -103,6 +110,8 @@ export function install(rt) {
       return undefined
     }
     if (parsed?.version === 1) {
+      persistedDigest = digest(contents)
+      persistedRevision = parsed.revision
       stuck = undefined
       return parsed
     }
@@ -390,6 +399,24 @@ export function install(rt) {
     rt.onStoreSync?.()
   }
 
+  // An extension may observe authority, never acquire it. Unlike refresh(), this
+  // path does not claim a lock, adopt/migrate state, rename a Session or save.
+  // The content digest catches outside edits that preserve mtime and file size.
+  const observeCatalogAccess = () => {
+    const denied = reason => ({ ready: storeReady && !stopped, canDispatchWorkflows: false, readOnlyReason: reason })
+    if (!storeReady || stopped) return denied('The Bot team snapshot is not ready.')
+    if (stuck !== undefined || lockBroken || holder !== undefined) return denied('The Bot team is read-only.')
+    if (adopting !== undefined || pendingWrites > 0 || persistedDigest === null || persistedRevision !== state.revision) return denied('The Bot team has unsettled state.')
+    try {
+      if (digest(JSON.stringify(state)) !== persistedDigest) return denied('The Bot team has unsaved changes.')
+      if (!lock.owns() || seen === '' || stamp() !== seen) return denied('The Bot team lock or snapshot has changed.')
+      if (digest(readFileSync(statePath)) !== persistedDigest || stamp() !== seen || !lock.owns()) return denied('The Bot team lock or snapshot has changed.')
+    } catch {
+      return denied('The Bot team snapshot cannot be verified.')
+    }
+    return { ready: true, canDispatchWorkflows: true, readOnlyReason: null }
+  }
+
   const warnReadOnly = () => {
     if (!warnedReadOnly) {
       warnedReadOnly = true
@@ -420,6 +447,7 @@ export function install(rt) {
     indexSessions()
     // A reading host keeps the file's revision, so its window does not skip the next change.
     if (!writable()) return required ? Promise.reject(new Error(`This host cannot save the Bot team: ${readOnly()}`)) : writing
+    pendingWrites += 1
     const run = writing.then(async () => {
       // Re-check writability once the queued write runs: an adopt queued before
       // it may have made this host read-only (e.g. a file a newer DS Bot wrote).
@@ -434,6 +462,7 @@ export function install(rt) {
       state.revision += 1
       state.exchanges = state.exchanges.slice(-MAX_EXCHANGES)
       const snapshot = JSON.stringify(state)
+      const snapshotRevision = state.revision
       const temp = `${statePath}.${process.pid}.tmp`
       try {
         await mkdir(home, { recursive: true })
@@ -457,6 +486,8 @@ export function install(rt) {
         ensureLock()
         await replaceFile(temp, statePath, ensureLock)
         seen = stamp()
+        persistedDigest = digest(snapshot)
+        persistedRevision = snapshotRevision
         rt.capabilitiesStateSaved?.()
         for (const listener of savedListeners) {
           try { listener() } catch (error) { warn('ds-bot: saved listener failed: %s', error) }
@@ -465,7 +496,7 @@ export function install(rt) {
         await unlink(temp).catch(() => {})
         throw error
       }
-    })
+    }).finally(() => { pendingWrites -= 1 })
     writing = run.catch(() => {})
     return run.catch(error => {
       warn('ds-bot: state write failed: %s', error)
@@ -660,7 +691,7 @@ export function install(rt) {
   }
 
   Object.assign(rt, {
-    state, load, save, refresh, readOnly, hasLoaded, syncReadOnly, own, onSaved, closeCard,
+    state, load, save, refresh, readOnly, hasLoaded, observeCatalogAccess, syncReadOnly, own, onSaved, closeCard,
     botOf, roomOf, isMain, chatOf, sessionOfRoom, selfOf, isBotSession,
     chatOwners, taskOwners, groupOwners, roomOwners, pastOwners,
     groupSessionsOf, dropGroupSession, retireGroupSession, findBot, findRooms, isAdminOf,
