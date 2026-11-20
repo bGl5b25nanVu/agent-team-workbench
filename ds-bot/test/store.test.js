@@ -643,3 +643,97 @@ test('indexSessions normalizes missing ids, empty sessionId, switched segments, 
   assert.equal(rt.selfOf(undefined), undefined)
   assert.equal(rt.roomOf(''), undefined)
 })
+
+test('catalog authority observation leaves an unloaded store and its lock absent', (t) => {
+  const { rt, home, statePath } = runtime(t)
+  const before = fs.readdirSync(home)
+  assert.equal(rt.observeCatalogAccess().ready, false)
+  assert.equal(rt.observeCatalogAccess().canDispatchWorkflows, false)
+  assert.equal(fs.existsSync(statePath), false)
+  assert.equal(fs.existsSync(join(home, 'state.lock')), false)
+  assert.deepEqual(fs.readdirSync(home), before)
+})
+
+test('catalog authority requires a settled saved snapshot and never reclaims a missing lock', async (t) => {
+  const { rt, statePath, home } = runtime(t)
+  await rt.load()
+  await rt.save()
+  assert.equal(rt.observeCatalogAccess().canDispatchWorkflows, true)
+  rt.state.prefs.marker = 'next'
+  const saving = rt.save()
+  assert.equal(rt.observeCatalogAccess().canDispatchWorkflows, false)
+  await saving
+  assert.equal(rt.observeCatalogAccess().canDispatchWorkflows, true)
+  const saved = fs.readFileSync(statePath)
+  const lockPath = join(home, 'state.lock')
+  fs.rmSync(lockPath)
+  assert.equal(rt.readOnly(), undefined, 'the old cached readOnly flag alone is insufficient')
+  assert.equal(rt.observeCatalogAccess().canDispatchWorkflows, false)
+  assert.equal(fs.existsSync(lockPath), false, 'a catalog observation must not take the free lock')
+  assert.deepEqual(fs.readFileSync(statePath), saved)
+})
+
+test('catalog authority rejects a different live lock token without changing either state or lock', async (t) => {
+  const { rt, statePath, home } = runtime(t)
+  await rt.load()
+  await rt.save()
+  const saved = fs.readFileSync(statePath)
+  const lockPath = join(home, 'state.lock')
+  const replacement = JSON.stringify({ pid: process.ppid, host: hostname(), token: 'another-holder' })
+  fs.writeFileSync(lockPath, replacement)
+  assert.equal(rt.observeCatalogAccess().canDispatchWorkflows, false)
+  assert.deepEqual(fs.readFileSync(statePath), saved)
+  assert.equal(fs.readFileSync(lockPath, 'utf8'), replacement)
+})
+
+test('catalog authority detects content changes even if size and mtime appear unchanged', async (t) => {
+  const { rt, statePath } = runtime(t)
+  await rt.load()
+  rt.state.prefs.marker = 'one'
+  await rt.save()
+  const metadata = fs.statSync(statePath)
+  const saved = fs.readFileSync(statePath, 'utf8')
+  const changed = saved.replace('"marker":"one"', '"marker":"two"')
+  assert.notEqual(changed, saved)
+  assert.equal(Buffer.byteLength(changed), Buffer.byteLength(saved))
+  fs.writeFileSync(statePath, changed)
+  const restore = patchSync('statSync', original => (path, ...args) => path === statePath ? metadata : original(path, ...args))
+  try {
+    assert.equal(rt.observeCatalogAccess().canDispatchWorkflows, false)
+    assert.equal(rt.state.prefs.marker, 'one', 'observation does not adopt an outside edit')
+    assert.equal(fs.readFileSync(statePath, 'utf8'), changed)
+  } finally { restore() }
+})
+
+test('catalog authority stays closed after a failed save and reopens only after a successful save', async (t) => {
+  const { rt, statePath } = runtime(t)
+  await rt.load()
+  await rt.save()
+  const saved = fs.readFileSync(statePath)
+  fs.mkdirSync(`${statePath}.${process.pid}.tmp`)
+  rt.state.prefs.marker = 'unsaved'
+  await assert.rejects(rt.save(), { code: 'EISDIR' })
+  assert.equal(rt.observeCatalogAccess().canDispatchWorkflows, false)
+  assert.deepEqual(fs.readFileSync(statePath), saved)
+  fs.rmSync(`${statePath}.${process.pid}.tmp`, { recursive: true })
+  await rt.save()
+  assert.equal(rt.observeCatalogAccess().canDispatchWorkflows, true)
+})
+
+
+test('catalog authority rejects unsaved in-memory changes even when the revision has not changed', async (t) => {
+  const { rt, statePath } = runtime(t)
+  await rt.load()
+  await rt.save()
+  const saved = fs.readFileSync(statePath)
+  const revision = rt.state.revision
+  assert.equal(rt.observeCatalogAccess().canDispatchWorkflows, true)
+  rt.state.rooms.team = { id: 'team', name: 'Not saved yet', members: ['admin', 'member'], admin: 'admin' }
+  const changed = JSON.stringify(rt.state)
+  assert.equal(rt.state.revision, revision)
+  assert.equal(rt.observeCatalogAccess().canDispatchWorkflows, false)
+  assert.equal(JSON.stringify(rt.state), changed, 'the observer does not repair or save in-memory changes')
+  assert.deepEqual(fs.readFileSync(statePath), saved)
+  await rt.save()
+  assert.equal(rt.observeCatalogAccess().canDispatchWorkflows, true)
+})

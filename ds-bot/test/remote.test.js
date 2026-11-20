@@ -659,3 +659,46 @@ test('plugin entry tracks late TypertGatewayService mount and disposal in hello'
   assert.equal(disposed.value.capabilities.includes('rpc'), false)
   assert.equal(disposed.value.rpc, undefined)
 })
+
+test('gongzuoCatalog is a real independent Remote method and never dispatches through the mutable channel', async (t) => {
+  const previousInstance = process.env.GONGZUO_SOURCE_INSTANCE_ID
+  const previousCommit = process.env.GONGZUO_FORK_SOURCE_SHA
+  process.env.GONGZUO_SOURCE_INSTANCE_ID = 'gongzuo-gateway-test-0001'
+  process.env.GONGZUO_FORK_SOURCE_SHA = 'b'.repeat(40)
+  t.after(() => {
+    if (previousInstance === undefined) delete process.env.GONGZUO_SOURCE_INSTANCE_ID
+    else process.env.GONGZUO_SOURCE_INSTANCE_ID = previousInstance
+    if (previousCommit === undefined) delete process.env.GONGZUO_FORK_SOURCE_SHA
+    else process.env.GONGZUO_FORK_SOURCE_SHA = previousCommit
+  })
+  const root = new Context()
+  await startGatewayHost(root)
+  t.after(async () => { await root.fiber.dispose() })
+  let mutations = 0
+  const refuseMutation = () => { mutations += 1; throw new Error('Catalog must not initialize or change the team') }
+  const rt = {
+    state: { revision: 11, bots: { b1: { id: 'b1' }, b2: { id: 'b2' } }, rooms: {
+      r1: { id: 'r1', sessionId: 'r-current', name: 'Native team', members: ['b1', 'b2'], admin: 'b1', team: { blueprint: 'software' } },
+    } },
+    hasLoaded: () => true,
+    observeCatalogAccess: () => ({ ready: true, canDispatchWorkflows: true, readOnlyReason: null }),
+    channelCall: refuseMutation, load: refuseMutation, refresh: refuseMutation, bootstrap: refuseMutation, save: refuseMutation,
+  }
+  const fork = await root.plugin(sub => { installRemote({ ...rt, ctx: sub }) })
+  await tick()
+  const endpoint = `${RPC_NAMESPACE}/gongzuoCatalog`
+  assert.equal(root.typertGateway.claimsEndpoint(endpoint), true)
+  const reply = await root.typertGateway.dispatchRpc(endpoint, {
+    args: { request: { protocol: 'gongzuo-catalog', version: 1 } },
+  }, new AbortController().signal, ownerPeer())
+  assert.equal(reply.ok, true, JSON.stringify(reply))
+  assert.equal(reply.value.ok, true, JSON.stringify(reply))
+  assert.equal(reply.value.value.protocol, 'gongzuo-catalog')
+  assert.equal(reply.value.value.revision, 11)
+  assert.equal(reply.value.value.teams[0].teamId, 'r1')
+  assert.equal(reply.value.value.teams[0].goal, null)
+  assert.equal(mutations, 0)
+  await fork.dispose()
+  await tick()
+  assert.equal(root.typertGateway.claimsEndpoint(endpoint), false)
+})

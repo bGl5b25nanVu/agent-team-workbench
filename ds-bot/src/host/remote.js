@@ -8,6 +8,7 @@
 // A plain-JS plugin has no Typert generator, so the Gateway serves these methods from
 // their `@Remote` markers (its source mode): simple parameter names, JSON values.
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { createGongzuoCatalog } from './gongzuo-catalog.js'
 
 export const RPC_NAMESPACE = 'dsBot'
 const RPC_ENDPOINTS = Object.freeze({ call: `${RPC_NAMESPACE}/call`, feed: `${RPC_NAMESPACE}/feed` })
@@ -137,6 +138,7 @@ export async function* feedEvents(subscribe, signal, stopSignal) {
 }
 
 export function createRemoteService(rt) {
+  const catalog = createGongzuoCatalog(rt)
   class DsBotRemote extends TypertRemoteService {
     constructor(ctx) {
       super(ctx, RPC_NAMESPACE)
@@ -159,12 +161,18 @@ export function createRemoteService(rt) {
       return plain(await rt.channelCall(name, payload ?? {}, signal))
     }
 
+    // This path intentionally bypasses channelCall: even its read endpoints refresh the store.
+    gongzuoCatalog(request, signal) {
+      return catalog(request, signal)
+    }
+
     feed(signal) {
       return feedEvents(rt.subscribeFeed, signal, this[STOP])
     }
   }
   const initializers = [
     ...decorate(DsBotRemote, 'call', Remote),
+    ...decorate(DsBotRemote, 'gongzuoCatalog', Remote),
     ...decorate(DsBotRemote, 'feed', Remote({ mode: 'stream' })),
   ]
   return DsBotRemote
