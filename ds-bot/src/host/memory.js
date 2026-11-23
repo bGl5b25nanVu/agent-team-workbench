@@ -25,7 +25,7 @@
 // provider's prefix cache holds; a fresh part, or a checkpoint (which breaks the cache
 // anyway), freezes it anew.
 import { createHash, randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, truncateSync, unlinkSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, renameSync, statSync, truncateSync, unlinkSync, writeFileSync } from 'node:fs'
 import { appendFile, mkdir, rename, unlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { HarnessError, createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -36,7 +36,7 @@ import { assembleLlmStream } from './models.js'
 import { inside, pendingPath, read as readPending, record as pendingRecord, relativePath, serialize as serializePending } from './memory-pending.js'
 import { estimateTokens, splitRef, textOf, unquote } from './text.js'
 import { EMPTY_MAIN, GONE, DENIED, HEADING, MAIN, MEMORY_LIMITS, NO_MATCH, ROUTED, addLink, bodySize, cleanDay, cleanEntry, cleanTopic, entryId, fitWindow, formatEntry, insertEntry, isExpired, isPinned, joinLines, looksSecret, matchEntries, newEntryId, parseAsk, parseMemory, promptEntry, TEAM_SHARED, removeLink, splitMeta, squash, topicAbout, WINDOW_SHARE } from './memory-entries.js'
-import { pickRecalled, rankEntries } from './memory-search.js'
+import { entryWords, pickRecalled, rankEntries } from './memory-search.js'
 import { GROUP_HEADING, GROUP_MEMORY_SOURCE, MEMORY_RECALL_SOURCE, MEMORY_UPDATE_SOURCE, RECALL_HEADING, RECALL_NOTE, SUMMARY_SYSTEM, UPDATE_HEADING, UPDATE_NOTE, askRequest, askSystem, groupNote, groupSummaryRequest, memoryRules, summaryRequest, teamRule } from './memory-copy.js'
 import { installReview } from './memory-review.js'
 import { installTidy } from './memory-tidy.js'
@@ -60,6 +60,7 @@ const UPDATE_TEXT_MAX = 4_000
 // The changes kept in memory for update messages, and how far back a start reads them.
 const RECENT_ROWS_MAX = 2_000
 const RECENT_TAIL_CHARS = 512 * 1024
+const JOURNAL_TAIL_BYTES = 64 * 1024
 const QUERY_TERMS_MAX = 6
 const SOURCE_READ_MS = 5_000
 const MODEL_TIMEOUT_MS = 120_000
@@ -128,7 +129,7 @@ export function install(rt) {
   }
   // The group a Session speaks in, an earlier part of it included: none for a Bot's
   // own chat. Writes check membership again, so a member that has left writes nothing.
-  const roomIdOf = sessionId => rt.groupOwners.get(sessionId)?.roomId ?? rt.pastOwners.get(sessionId)?.roomId
+  const roomIdOf = sessionId => rt.groupOwners.get(sessionId)?.roomId ?? rt.taskOwners?.get(sessionId)?.roomId ?? rt.pastOwners.get(sessionId)?.roomId
   // The Bot whose model keeps a group's memory: its admin, else its first member.
   const keeperOf = room => rt.botOf(room.admin) ?? room.members.map(id => rt.botOf(id)).find(Boolean)
 
@@ -163,6 +164,52 @@ export function install(rt) {
       const content = readText(join(dir, file))
       return { topic, file, path: join(dir, file), content, ...parseMemory(content) }
     })
+  }
+  // Recall runs on every step, and a Bot may search on every turn, so each file is kept
+  // parsed and tokenized until it changes. The file is looked at before it is read: a
+  // write in between is read again on the next call instead of being kept under the old
+  // revision. The entries are shared between calls; callers must not change them.
+  const recallCache = new Map()
+  const mainCache = new Map()
+  const revisionOf = (path) => {
+    try {
+      const stat = statSync(path, { bigint: true, throwIfNoEntry: false })
+      return stat === undefined ? undefined : `${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`
+    } catch (error) {
+      return unreadable(path, error)
+    }
+  }
+  const parsedFile = (dir, topic, cached) => {
+    const file = topic === undefined ? MAIN : `${topic}.md`
+    const path = join(dir, file)
+    const revision = revisionOf(path)
+    if (revision === undefined) return undefined
+    if (cached?.revision === revision) return cached
+    const content = readText(path)
+    const parsed = { topic, file, path, content, ...parseMemory(content) }
+    return { revision, entries: parsed.entries.map(entry => ({ ...entry, file: parsed })).map(entry => ({ ...entry, words: entryWords(entry) })) }
+  }
+  const recallEntries = (scope, names = topicNames(scope)) => {
+    const dir = dirOf(scope)
+    const cached = recallCache.get(dir)
+    const topics = new Map()
+    for (const topic of names) {
+      const parsed = parsedFile(dir, topic, cached?.get(topic))
+      if (parsed !== undefined) topics.set(topic, parsed)
+    }
+    if (topics.size === 0) recallCache.delete(dir)
+    else recallCache.set(dir, topics)
+    return [...topics.values()].flatMap(parsed => parsed.entries)
+  }
+  // Every entry of a scope, MEMORY.md first, read in loadScope's order so an unreadable
+  // file fails the same way.
+  const searchEntries = (scope) => {
+    const dir = dirOf(scope)
+    const names = topicNames(scope)
+    const main = parsedFile(dir, undefined, mainCache.get(dir))
+    if (main === undefined) mainCache.delete(dir)
+    else mainCache.set(dir, main)
+    return [...(main?.entries ?? []), ...recallEntries(scope, names)]
   }
   const mainLimit = scope => state.prefs.memoryLimits?.[scope.kind] ?? MEMORY_LIMITS[scope.kind]
   const fileName = file => (file.topic === undefined ? MAIN : `topic [[${file.topic}]]`)
@@ -220,6 +267,42 @@ export function install(rt) {
     }
   }
 
+  // The end of the change log, from where it starts in bytes: at least its last whole
+  // row and what follows it. Every write finishes an interrupted change first, so the
+  // row of a change that is finished twice is the last one in its log, and a half row
+  // can only be at the end. The log only grows, so a write does not read all of it.
+  function journalTail(path) {
+    let fd
+    try {
+      fd = openSync(path, 'r')
+    } catch (error) {
+      if (error?.code === 'ENOENT') return { start: 0, text: '' }
+      unreadable(path, error)
+    }
+    try {
+      const size = fstatSync(fd).size
+      for (let length = JOURNAL_TAIL_BYTES; ; length *= 2) {
+        const start = Math.max(0, size - length)
+        const bytes = Buffer.alloc(size - start)
+        for (let at = 0; at < bytes.length;) {
+          const read = readSync(fd, bytes, at, bytes.length - at, start + at)
+          if (read === 0) break
+          at += read
+        }
+        const last = bytes.lastIndexOf(0x0a)
+        // A newline byte is never part of a longer character, so cutting after one
+        // keeps the text and its offset in bytes whole.
+        if (start > 0 && !(last > 0 && bytes.lastIndexOf(0x0a, last - 1) >= 0)) continue
+        const from = start === 0 ? 0 : bytes.indexOf(0x0a) + 1
+        return { start: start + from, text: bytes.subarray(from).toString('utf8') }
+      }
+    } catch (error) {
+      unreadable(path, error)
+    } finally {
+      closeSync(fd)
+    }
+  }
+
   // Whether the change log already holds the row of a change. Only a row that parses
   // counts: a half-written row is not proof that anything was done.
   function journalled(text, id) {
@@ -249,7 +332,7 @@ export function install(rt) {
   // are whole, and the row after it starts on a line of its own.
   async function journalRow(row) {
     const { path, torn } = journalFor(row.scope, row.op)
-    const text = readJournal(path)
+    const { start, text } = journalTail(path)
     if (journalled(text, row.id)) return false
     const cut = text.lastIndexOf('\n') + 1
     const half = text.slice(cut)
@@ -267,7 +350,7 @@ export function install(rt) {
       return true
     }
     await appendFile(torn, `${half}\n`, 'utf8')
-    truncateSync(path, Buffer.byteLength(text.slice(0, cut), 'utf8'))
+    truncateSync(path, start + Buffer.byteLength(text.slice(0, cut), 'utf8'))
     await appendFile(path, `${line}\n`, 'utf8')
     return true
   }
@@ -636,10 +719,14 @@ export function install(rt) {
       await recoverPending()
       await unlink(join(root, 'summaries', `${safeId(botId)}.json`)).catch(() => {})
       const dir = dirOf(ownScope(botId))
-      if (!existsSync(dir)) return
+      if (!existsSync(dir)) {
+        recallCache.delete(dir)
+        return
+      }
       const name = `${safeId(botId)}-${new Date().toISOString().replace(/[:.]/g, '-')}`
       await mkdir(join(root, 'archive'), { recursive: true })
       await rename(dir, join(root, 'archive', name))
+      recallCache.delete(dir)
       // The memory is in the archive from here: a log row that cannot be written must not
       // hide where it went, which the privacy guard needs to keep a private archive closed.
       await journalRow({ id: randomUUID(), time: new Date().toISOString(), op: 'archive', scope: scopeKey(ownScope(botId)), actor: 'user', actorName: 'user', botName: bot?.name, to: `archive/${name}` })
@@ -661,10 +748,14 @@ export function install(rt) {
       await recoverPending()
       await unlink(summaryPath(room.id)).catch(() => {})
       const dir = dirOf(groupScope(room.id))
-      if (!existsSync(dir)) return
+      if (!existsSync(dir)) {
+        recallCache.delete(dir)
+        return
+      }
       const name = `group-${safeId(room.id)}-${new Date().toISOString().replace(/[:.]/g, '-')}`
       await mkdir(join(root, 'archive'), { recursive: true })
       await rename(dir, join(root, 'archive', name))
+      recallCache.delete(dir)
       await journalRow({ id: randomUUID(), time: new Date().toISOString(), op: 'archive', scope: scopeKey(groupScope(room.id)), actor: 'user', actorName: 'user', groupName: room.name, to: `archive/${name}` })
     }).catch(error => rt.warn('ds-bot: memory of group %s not archived: %s', room.name, error))
   }
@@ -687,7 +778,8 @@ export function install(rt) {
     return usable === undefined ? undefined : Math.floor(usable * WINDOW_SHARE)
   }
   function shownEntries(file, topics, budget) {
-    const entries = file.entries.filter(entry => !isExpired(entry, today()))
+    const day = today()
+    const entries = file.entries.filter(entry => !isExpired(entry, day))
     const omitted = count => `(${count} more entries are saved here; bot_recall finds them.)`
     let { shown, left } = fitWindow(entries, budget, estimateTokens)
     if (left > 0) ({ shown, left } = fitWindow(entries, budget - estimateTokens(omitted(entries.length)), estimateTokens))
@@ -898,12 +990,13 @@ export function install(rt) {
     const scopes = [own, ...(roomId === undefined ? [] : [groupScope(roomId)]), TEAM]
     let topicEntries
     try {
-      topicEntries = scopes.flatMap(scope => allEntries(loadScope(scope).slice(1)).map(entry => ({ ...entry, tag: tagOf(scope, bot.id) })))
+      topicEntries = scopes.flatMap(scope => recallEntries(scope).map(entry => ({ ...entry, tag: tagOf(scope, bot.id) })))
     } catch (error) {
       rt.warn('ds-bot: memory recall for %s not read: %s', bot.name, error?.message ?? error)
       return undefined
     }
-    const open = topicEntries.filter(entry => !isExpired(entry, today()) && !shown.has(entryId(entry)))
+    const day = today()
+    const open = topicEntries.filter(entry => !isExpired(entry, day) && !shown.has(entryId(entry)))
     const picked = []
     let used = 0
     for (const { entry } of pickRecalled(rankEntries(open, query), AUTO_RECALL_MAX)) {
@@ -1011,7 +1104,7 @@ export function install(rt) {
   // Where the caller learned it: the anchor of the latest message to it in this part,
   // which read_own_chat opens, or the group and the time.
   async function sourceOf(sessionId) {
-    const owner = rt.groupOwners.get(sessionId)
+    const owner = rt.groupOwners.get(sessionId) ?? (rt.taskOwners?.get(sessionId)?.roomId !== undefined ? rt.taskOwners.get(sessionId) : undefined)
     if (owner !== undefined) {
       const room = rt.roomOf(owner.roomId)
       return room === undefined ? 'group ?' : `group "${room.name}" #${room.seq}`
@@ -1164,13 +1257,16 @@ export function install(rt) {
       const self = caller.bot.id
       const { scopes, error } = readScopes(args.scope, self, caller.roomId)
       if (error) return error
+      const wantsTopic = args.topic !== undefined && String(args.topic).trim() !== ''
+      const query = String(args.query ?? '').trim().slice(0, 120)
+      const searching = !wantsTopic && query !== ''
       let loaded
       try {
-        loaded = await settled(() => scopes.map(scope => ({ scope, tag: tagOf(scope, self), label: labelOf(scope, self), files: loadScope(scope) })))
+        loaded = await settled(() => scopes.map(scope => ({ scope, tag: tagOf(scope, self), label: labelOf(scope, self), ...(searching ? { entries: searchEntries(scope) } : { files: loadScope(scope) }) })))
       } catch (failure) {
         return failure.message
       }
-      if (args.topic !== undefined && String(args.topic).trim() !== '') {
+      if (wantsTopic) {
         const topic = cleanTopic(args.topic)
         for (const { scope, label, files } of loaded) {
           const file = files.find(item => item.topic === topic)
@@ -1180,8 +1276,7 @@ export function install(rt) {
         return `No topic [[${String(args.topic).slice(0, 60)}]] there. Topics: ${known.join(', ') || 'none yet'}.`
       }
       const where = (tag, file) => `${tag} · ${file.topic === undefined ? MAIN : `[[${file.topic}]]`}`
-      const query = String(args.query ?? '').trim().slice(0, 120)
-      if (query === '') {
+      if (!searching) {
         return loaded.map(({ scope, tag, label, files }) => {
           const [main, ...topics] = files
           return [
@@ -1203,7 +1298,7 @@ export function install(rt) {
         for (const run of word.match(/[\u4e00-\u9fff]{2,}/g) ?? []) for (let at = 0; at + 1 < run.length; at += 1) parts.add(run.slice(at, at + 2))
         return [word, ...parts]
       }))]
-      const scored = loaded.flatMap(({ tag, files }) => allEntries(files).map((entry) => {
+      const scored = loaded.flatMap(({ tag, entries }) => entries.map((entry) => {
         const hay = squash(`${entry.text} ${entry.file.topic ?? ''}`)
         return { entry, tag, count: terms.filter(term => hay.includes(term)).length }
       })).filter(hit => hit.count > 0)

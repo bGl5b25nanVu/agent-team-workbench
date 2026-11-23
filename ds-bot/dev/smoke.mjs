@@ -516,6 +516,9 @@ await step('a real user message activates its dormant recipient', () => {
 })
 
 await step('Coordinator runs a background task forked from its own chat and receives the report', async () => {
+  // Coordinator can roll over to a fresh part under CHECK_RATIO=0.45 right before this step,
+  // leaving only the handoff messages in the current part; stored.startSeq > 0 still proves fork.
+  const rolledOver = (coordinator().segments?.length ?? 0) > 0
   await send(coordinator().id, '调用 task_start {"title":"后台冒烟","brief":"检查上下文并回报"}')
   const deadline = Date.now() + 25_000
   let task
@@ -527,21 +530,129 @@ await step('Coordinator runs a background task forked from its own chat and rece
     await sleep(300)
   }
   await settle()
+  const stored = (coordinator().tasks ?? []).find(item => item.id === task?.id)
   const page = task === undefined ? null : await api('bot-task-read', { botId: coordinator().id, taskId: task.id })
   const swapBlocked = task === undefined ? false : await api('bot-open-part', { botId: coordinator().id, sessionId: task.sessionId }).then(() => false, () => true)
-  return { task, page, swapBlocked }
-}, ({ task, page, swapBlocked }, calls) => {
+  return { task, stored, rolledOver, page, swapBlocked }
+}, ({ task, stored, rolledOver, page, swapBlocked }, calls) => {
   const outputs = calls.flatMap(call => call.out ?? []).filter(block => block.type === 'text').map(block => block.text)
   const taskLine = outputs.find(line => line.includes('后台任务已完成，共继承'))
   const inherited = Number(/共继承 (\d+) 条消息/.exec(taskLine ?? '')?.[1] ?? 0)
   const fgReport = outputs.find(line => line.includes('已收到后台任务汇报'))
   return expect(
     task?.status === 'completed'
-      && inherited > 5
+      && (stored?.startSeq ?? 0) > 0
+      && inherited >= (rolledOver ? 3 : 6)
       && fgReport !== undefined
       && page?.sessionId === task.sessionId
       && swapBlocked === true,
-    `task=${JSON.stringify(task)} inherited=${inherited} fgReport=${fgReport} page=${page?.sessionId} swapBlocked=${swapBlocked}`,
+    `task=${JSON.stringify(task)} startSeq=${stored?.startSeq} rolledOver=${rolledOver} inherited=${inherited} fgReport=${fgReport} page=${page?.sessionId} swapBlocked=${swapBlocked}`,
+  )
+})
+
+await step('busy foreground auto-moves to background on new user message and reports back', async () => {
+  const oldSid = coordinator().sessionId ?? coordinator().id
+  const callsBefore = mockLog().length
+  await send(coordinator().id, '慢活 4')
+  // Wait until list_bots tool call has been issued (toolCount >= 1) and second model call is in flight.
+  const busyDeadline = Date.now() + 10_000
+  while (Date.now() < busyDeadline) {
+    if (mockLog().length > callsBefore) break
+    await sleep(100)
+  }
+  await sleep(300)
+  // User sends a new message while Coordinator is busy -> oldSid moves into bot.tasks[] as fg-handoff.
+  await send(coordinator().id, '前台新问题')
+  const newSid = coordinator().sessionId ?? coordinator().id
+  const deadline = Date.now() + 25_000
+  let movedTask
+  while (Date.now() < deadline) {
+    const view = await api('state')
+    const chiefView = view.bots?.find(item => item.id === coordinator().id)
+    movedTask = (chiefView?.tasks ?? []).find(item => item.sessionId === oldSid)
+    if (movedTask?.status === 'completed') break
+    await sleep(300)
+  }
+  await settle()
+  return { oldSid, newSid, movedTask }
+}, ({ oldSid, newSid, movedTask }, calls) => {
+  const outputs = calls.flatMap(call => call.out ?? []).filter(block => block.type === 'text').map(block => block.text)
+  const slowDone = outputs.find(line => line.includes('慢活已完成'))
+  const fgReport = outputs.find(line => line.includes('已收到后台任务汇报') && line.includes('慢活已完成'))
+  return expect(
+    newSid !== oldSid
+      && movedTask?.origin === 'fg-handoff'
+      && movedTask?.status === 'completed'
+      && slowDone !== undefined
+      && fgReport !== undefined,
+    `oldSid=${oldSid} newSid=${newSid} movedTask=${JSON.stringify(movedTask)} slowDone=${slowDone} fgReport=${fgReport}`,
+  )
+})
+
+await step('peer Bot messaging a busy Bot spawns a bot-handoff task without switching foreground', async () => {
+  const fgBefore = coordinator().sessionId ?? coordinator().id
+  const beforeCount = (coordinator().tasks ?? []).length
+  const callsBefore = mockLog().length
+  await send(coordinator().id, '慢活 6')
+  const busyDeadline = Date.now() + 10_000
+  while (Date.now() < busyDeadline) {
+    if (mockLog().length > callsBefore) break
+    await sleep(100)
+  }
+  await sleep(300)
+  await send(botNamed('Coder').id, `转告 ${coordinatorName}：并行核对接口`)
+  const deadline = Date.now() + 25_000
+  let peerTask
+  while (Date.now() < deadline) {
+    const view = await api('state')
+    const chiefView = view.bots?.find(item => item.id === coordinator().id)
+    peerTask = (chiefView?.tasks ?? []).slice(beforeCount).find(item => item.origin === 'bot-handoff')
+    if (peerTask?.status === 'completed') break
+    await sleep(300)
+  }
+  await settle()
+  const fgAfter = coordinator().sessionId ?? coordinator().id
+  return { fgBefore, fgAfter, peerTask }
+}, ({ fgBefore, fgAfter, peerTask }, calls) => {
+  const outputs = calls.flatMap(call => call.out ?? []).filter(block => block.type === 'text').map(block => block.text)
+  const peerReplied = outputs.some(line => line.includes('给 Coder 的回复'))
+  return expect(
+    fgBefore === fgAfter
+      && peerTask?.origin === 'bot-handoff'
+      && peerTask?.status === 'completed'
+      && peerReplied,
+    `fgBefore=${fgBefore} fgAfter=${fgAfter} peerTask=${JSON.stringify(peerTask)} peerReplied=${peerReplied}`,
+  )
+})
+
+await step('group member runs a background task in a group chat and reports back to the group', async () => {
+  await send(capabilityRoom.id, '@Coder 调用 task_start {"title":"群后台冒烟","brief":"检查群上下文并回报"}')
+  const deadline = Date.now() + 25_000
+  let task
+  while (Date.now() < deadline) {
+    const view = await api('state')
+    const coderView = view.bots?.find(item => item.id === botNamed('Coder').id)
+    task = (coderView?.tasks ?? []).find(item => item.title === '群后台冒烟')
+    if (task?.status === 'completed') break
+    await sleep(300)
+  }
+  await settle()
+  const finalState = await api('state')
+  const roomView = finalState.rooms?.find(item => item.id === capabilityRoom.id)
+  const page = task === undefined ? null : await api('bot-task-read', { botId: botNamed('Coder').id, taskId: task.id })
+  return { task, preview: roomView?.preview ?? '', page }
+}, ({ task, preview, page }, calls) => {
+  const outputs = calls.flatMap(call => call.out ?? []).filter(block => block.type === 'text').map(block => block.text)
+  const taskLine = outputs.find(line => line.includes('后台任务已完成，共继承'))
+  const groupReport = outputs.find(line => line.includes('已收到后台任务汇报'))
+  return expect(
+    task?.status === 'completed'
+      && task?.roomId === capabilityRoom.id
+      && taskLine !== undefined
+      && groupReport !== undefined
+      && preview.includes('已收到后台任务汇报')
+      && page?.sessionId === task.sessionId,
+    `task=${JSON.stringify(task)} taskLine=${taskLine} groupReport=${groupReport} preview=${preview} page=${page?.sessionId}`,
   )
 })
 

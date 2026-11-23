@@ -4,7 +4,7 @@
 :root{color-scheme:light dark;--bt-main:#fbfcff;--bt-card:#ffffff;--bt-ink:#171d2b;--bt-ink-2:rgba(23,29,43,0.6);--bt-line:rgba(23,29,43,0.08);--bt-line-2:rgba(23,29,43,0.15);--bt-hover:rgba(119,119,119,.09);--bt-accent:#3157ed;--bt-accent-ink:#ffffff;--bt-ink-deepseek:#3157ed;--bt-green:#00c972;--bt-danger:#e02135}
 @media (prefers-color-scheme:dark){:root{--bt-main:#111722;--bt-card:#1a2333;--bt-ink:#edf1fa;--bt-ink-2:rgba(237,241,250,0.6);--bt-line:rgba(237,241,250,0.08);--bt-line-2:rgba(237,241,250,0.15);--bt-hover:rgba(160,160,160,.12);--bt-accent:#91a8ff;--bt-accent-ink:#141414;--bt-ink-deepseek:#91a8ff}}
 /* /tokens */
-:root{--font:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei UI",system-ui,sans-serif;--mono:ui-monospace,Consolas,monospace;--u:1.12px}
+:root{--font:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;--mono:ui-monospace,Consolas,monospace;--u:1.12px}
 /* springs */
 /* Generated from ds-bot/src/client/motion.js by scripts/start-assets.mjs; do not edit. */
 :root {
@@ -279,7 +279,8 @@ html[data-hidden] *{animation-play-state:paused!important}
 :root .props>g{scale:none!important;transition:opacity .12s!important}
 :root :is(.arc-fill,.ring-full){transition-duration:.12s!important}
 :root .voice>span{animation:none!important;background:none!important;color:var(--bt-ink)!important}
-:root :is(.voice,.caption>*,.card,.miss,.banner,.log,.confirm,.models,[data-u]){filter:none!important;scale:none!important;transition-property:opacity!important;transition-duration:.12s!important;transition-delay:0s!important}
+:root :is(.voice,.caption>*,.card,.miss,.banner,.log,.confirm,.models,.more,[data-u]){filter:none!important;scale:none!important;transition-property:opacity!important;transition-duration:.12s!important;transition-delay:0s!important}
+:root .disclose svg{transition:none!important}
 :root .btn:active{scale:none}
 :root[data-exit~=lane] .lane{opacity:0;transition:opacity .12s}
 }
@@ -288,6 +289,6 @@ html[data-hidden] *{animation-play-state:paused!important}
 :root:is([data-effects=reduced],[data-effects=off]) :is(.arc-glow,.page,.gear-big,.gear-small,[data-p=engine],.box-moving,.mate),:root:is([data-effects=reduced],[data-effects=off])[data-whale] :is(.whale-loop){animation:none!important}
 :root[data-effects=off] :is(*,::before,::after){animation:none!important;transition:none!important}
 :root[data-effects=off] .props>g,:root[data-effects=off] .btn:active{scale:none!important}
-:root[data-effects=off] :is(.voice,.caption>*,.card,.miss,.banner,.log,.confirm,.models,[data-u]){filter:none!important;scale:none!important}
+:root[data-effects=off] :is(.voice,.caption>*,.card,.miss,.banner,.log,.confirm,.models,.more,[data-u]){filter:none!important;scale:none!important}
 
 @media (forced-colors:active){.sheet-edge{background:CanvasText}.sheet-fill{background:Canvas}.btn{border:1px solid ButtonText}.bar-fill{background:Highlight}.arc .arc-base{stroke:GrayText!important}.arc-fill,.ring-full,.arc-glow{stroke:Highlight}.props :is(.folder-back,.folder-front,.gear,.mate circle,.box rect){fill:CanvasText}.page rect,.mate rect{fill:Canvas}}

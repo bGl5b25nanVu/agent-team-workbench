@@ -64,8 +64,9 @@ function render(el, vars = {}) {
     return CODE.has(part) ? Object.assign(document.createElement('code'), { textContent: value }) : value
   }))
 }
+const HTML_LANG = { zh: 'zh-CN', 'zh-TW': 'zh-TW', ja: 'ja', ko: 'ko', es: 'es', fr: 'fr', de: 'de', en: 'en' }
 function renderStatic() {
-  root.lang = lang === 'zh' ? 'zh-CN' : 'en'
+  root.lang = HTML_LANG[lang] ?? lang ?? 'en'
   document.title = brandName(lang)
   $('.brand-name').textContent = brandName(lang)
   for (const el of document.querySelectorAll('.track [data-t], .footrow [data-t], .caption [data-t]')) render(el)

@@ -8,7 +8,7 @@ import { chromium } from 'playwright-core'
 const { outputFiles } = await build({
   stdin: {
     contents: "export { SHELL_CSS, botOwnCss } from './src/client/styles.js'",
-    resolveDir: fileURLToPath(new URL('..', import.meta.url)),
+    resolveDir: fileURLToPath(new URL('../..', import.meta.url)),
   },
   bundle: true, format: 'cjs', platform: 'browser', write: false, logLevel: 'silent',
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
@@ -49,15 +49,71 @@ const fullHeightPage = `<div class="plugin-page">
   <div class="plugin-actions"><button>Save</button><button>Discard</button></div>
 </div>`
 
+async function launchBrowser() {
+  const options = {
+    headless: true,
+    ...(process.env.BROWSER_EXECUTABLE_PATH ? { executablePath: process.env.BROWSER_EXECUTABLE_PATH } : {}),
+  }
+  try {
+    return await chromium.launch(options)
+  } catch (error) {
+    if (process.env.BROWSER_EXECUTABLE_PATH) throw error
+    // Local contributors who have Chrome installed but did not run playwright install.
+    return chromium.launch({ channel: 'chrome', headless: true }).catch(() => { throw error })
+  }
+}
+
+test('DS Bot preference rows keep one divider each and empty items vanish (#1815)', async (t) => {
+  let browser
+  try {
+    browser = await launchBrowser()
+  } catch (error) {
+    if (!process.env.CI && /not found|doesn't exist|not installed/i.test(error.message)) {
+      t.skip('Chromium or Chrome is required for the settings layout regression')
+      return
+    }
+    throw error
+  }
+  try {
+    const page = await browser.newPage({ viewport: { width: 800, height: 600 } })
+    try {
+      const row = text => `<div class="bt-set-row"><div class="bt-set-copy">${text}</div></div>`
+      // SettingsPreferences renders straight into .bt-dsh-item (no [data-slot] wrapper): an item may
+      // be empty, hold several rows, or hold a row followed by an error note.
+      await page.setContent(fixture(`<section class="bt-set-section"><div class="bt-set-card">
+        <div class="bt-dsh-item">${row('language')}</div>
+        <div class="bt-dsh-item" id="empty-a"></div>
+        <div class="bt-dsh-item">${row('transcript')}${row('collapse')}${row('folded')}</div>
+        <div class="bt-dsh-item" id="empty-b"></div>
+        <div class="bt-dsh-item">${row('permission')}<div class="bt-set-note" role="alert">Unavailable</div></div>
+        <div class="bt-dsh-item" id="empty-c"></div>
+      </div></section>`))
+      const layout = await page.evaluate(() => {
+        const card = document.querySelector('.bt-set-card')
+        const visible = element => getComputedStyle(element).display !== 'none'
+        const lines = [...card.querySelectorAll('.bt-dsh-item, .bt-set-row, .bt-set-note')]
+          .filter(element => visible(element) && parseFloat(getComputedStyle(element).borderTopWidth) > 0)
+        return {
+          hidden: ['#empty-a', '#empty-b', '#empty-c'].map(selector => visible(document.querySelector(selector))),
+          blocks: card.querySelectorAll('.bt-set-row, .bt-set-note').length,
+          lines: lines.length,
+          note: getComputedStyle(card.querySelector('.bt-set-note')).paddingLeft,
+        }
+      })
+      assert.deepEqual(layout.hidden, [false, false, false], JSON.stringify(layout))
+      assert.equal(layout.lines, layout.blocks - 1, JSON.stringify(layout))
+      assert.equal(layout.note, '16px', JSON.stringify(layout))
+    } finally { await page.close() }
+  } finally { await browser.close() }
+})
+
 test('DSH settings pages keep usable height and scrolling (#1359)', async (t) => {
   let browser
   try {
-    browser = await chromium.launch({ channel: 'chrome', headless: true })
+    browser = await launchBrowser()
   } catch (error) {
-    // GitHub's Linux and Windows runners include Chrome. Local contributors
-    // without it can still run the non-browser suite.
     if (!process.env.CI && /not found|doesn't exist|not installed/i.test(error.message)) {
-      t.skip('Chrome is required for the settings layout regression')
+      t.skip('Chromium or Chrome is required for the settings layout regression')
       return
     }
     throw error
@@ -131,6 +187,49 @@ test('DSH settings pages keep usable height and scrolling (#1359)', async (t) =>
           followingTop: document.querySelector('#following').getBoundingClientRect().top,
         }))
         assert.ok(layout.followingTop >= layout.contentBottom, JSON.stringify(layout))
+      } finally { await page.close() }
+    })
+    await t.test('direct .bt-set-card children keep natural height and scroll in short viewports', async () => {
+      const page = await browser.newPage({ viewport: { width: 800, height: 420 } })
+      try {
+        await page.setContent(`<!doctype html><style>
+          ${botOwnCss(SHELL_CSS)}
+          *{animation:none!important;transition:none!important}
+        </style>
+        <div class="bt-settings-layer"><div class="bt-settings">
+          <nav class="bt-settings-nav">Settings</nav>
+          <div class="bt-settings-main">
+            <div class="bt-settings-head"><h2>Models</h2></div>
+            <div class="bt-settings-scroll bt-settings-page">
+              <section class="bt-set-section"><div class="bt-set-card" style="height:520px"><div class="bt-set-row">Provider list</div></div></section>
+              <div class="bt-set-card" id="advanced-card">
+                <button type="button" class="bt-set-row" id="advanced-btn"><span class="bt-set-copy"><span>Advanced settings</span></span></button>
+              </div>
+            </div>
+          </div>
+        </div></div>`)
+        await page.locator('.bt-settings-scroll').evaluate(node => { node.scrollTop = node.scrollHeight })
+        const layout = await page.evaluate(() => {
+          const scroll = document.querySelector('.bt-settings-scroll')
+          const card = document.querySelector('#advanced-card')
+          const btn = document.querySelector('#advanced-btn')
+          const scrollRect = scroll.getBoundingClientRect()
+          const cardRect = card.getBoundingClientRect()
+          const btnRect = btn.getBoundingClientRect()
+          return {
+            scrollTop: scroll.scrollTop,
+            cardHeight: cardRect.height,
+            btnHeight: btnRect.height,
+            btnTop: btnRect.top,
+            btnBottom: btnRect.bottom,
+            scrollTopEdge: scrollRect.top,
+            scrollBottomEdge: scrollRect.bottom,
+          }
+        })
+        assert.ok(layout.scrollTop > 0, JSON.stringify(layout))
+        assert.ok(layout.cardHeight >= 48, `direct .bt-set-card must not collapse: ${JSON.stringify(layout)}`)
+        assert.ok(layout.btnHeight >= 48, `button inside .bt-set-card must not be clipped: ${JSON.stringify(layout)}`)
+        assert.ok(layout.btnTop >= layout.scrollTopEdge && layout.btnBottom <= layout.scrollBottomEdge, JSON.stringify(layout))
       } finally { await page.close() }
     })
   } finally { await browser.close() }

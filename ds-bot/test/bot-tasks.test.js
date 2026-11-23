@@ -74,14 +74,14 @@ async function startEnv({ team = makeTeam(), forkImpl, jobsList = () => [], appr
   const archivedSessions = []
   let seqId = 0
 
-  const makeAgent = (id) => {
+  const makeAgent = (id, cwd = workDir) => {
     const events = []
     const followups = []
     const steers = []
     const cancelled = []
     const session = {
       id,
-      header: { cwd: workDir },
+      header: { cwd },
       events,
       requestHeader: () => undefined,
       snapshotEvents: () => [...events],
@@ -129,7 +129,7 @@ async function startEnv({ team = makeTeam(), forkImpl, jobsList = () => [], appr
       create: async ({ title, cwd }) => {
         const sessionId = `ses-${++seqId}`
         createdSessions.push({ sessionId, title, cwd })
-        makeAgent(sessionId)
+        makeAgent(sessionId, cwd)
         return { sessionId }
       },
       fork: async (opts) => {
@@ -308,7 +308,7 @@ test('turn/end state machine ignores disposed, switched/blocked, HANDOFF_ACK, ru
   assert.match(env.deliveries.find(d => d.role === 'task-report').text, /Final verified answer\./)
 })
 
-test('nested task_* tools, interactive cards (ask_user/show_view/request_secret), and switchPart are blocked for tasks', async (t) => {
+test('nested task_* tools and interactive cards (ask_user/show_view/request_secret) are blocked for tasks, and tasks stay read-only', async (t) => {
   const env = await startEnv()
   t.after(env.stop)
   const dmA = env.agentMap.get('dm-a')
@@ -327,8 +327,8 @@ test('nested task_* tools, interactive cards (ask_user/show_view/request_secret)
   const secRes = await env.tool('request_secret').execute({ name: 'MY_API_KEY', purpose: 'call api' }, execOf(taskAgent))
   assert.match(secRes, /Background tasks cannot show secret cards/)
 
-  // Clicking/opening a task via switchPart or bot-open-part must fail instead of swapping bot.sessionId.
-  await assert.rejects(env.rt.switchPart('a', task.sessionId), /read-only/i)
+  // Session switching is removed, so tasks can never swap bot.sessionId.
+  assert.equal(env.rt.switchPart, undefined)
   const openRes = await env.callApi('bot-open-part', { botId: 'a', sessionId: task.sessionId })
   assert.equal(openRes.ok, false)
   assert.equal(env.rt.botOf('a').sessionId, 'dm-a', 'bot.sessionId must remain unchanged')
@@ -511,7 +511,10 @@ test('reconcileTasksAfterRestart marks orphaned idle tasks interrupted while pre
   assert.match(interruptReport.text, /restarted/)
 
   // reconcileEndedTask settles a task whose turn ended during plugin reload using durable log.
-  env.agentMap.get(tInflight.sessionId).session.events.push(
+  const inflightAgent = env.agentMap.get(tInflight.sessionId)
+  const firstMsg = inflightAgent.followups[0]
+  await env.emit(tInflight.sessionId, 'user/message', { source: firstMsg.source, content: firstMsg.content })
+  inflightAgent.session.events.push(
     { type: 'turn/start', seq: 10, data: { turn: 1 } },
     { type: 'assistant/message', seq: 11, data: { message: { role: 'assistant', content: [{ type: 'text', text: 'Reload finished work.' }] } } },
   )
@@ -645,9 +648,7 @@ test('partsOfThread, settled task pastOwners routing, post_to_group(report_back)
   const task = botA.tasks[0]
   const taskAgent = env.agentMap.get(task.sessionId)
 
-  // 1. partsOfThread handles task threads cleanly even when openParts is empty or populated.
-  assert.deepEqual(env.rt.partsOfThread('a', task.sessionId).map(p => p.sessionId), [task.sessionId])
-  botA.openParts = [{ sessionId: 'open-1', segments: [] }]
+  // 1. partsOfThread isolates a task thread cleanly from foreground segments.
   assert.deepEqual(env.rt.partsOfThread('a', task.sessionId).map(p => p.sessionId), [task.sessionId])
 
   // 2. setPermission propagates to active background task sessions too.
@@ -726,4 +727,107 @@ test('task_read resolves unloaded cold task sessions and bot-task-read works on 
   env.rt.readOnly = () => 'Another host holds the team.'
   const roRes = await env.callApi('bot-task-read', { botId: 'a', taskId: task.id })
   assert.equal(roRes.ok, true, 'bot-task-read must be allowed in READS for read-only hosts')
+})
+
+test('bot-task-read excludes inherited foreground chat history, renders task-brief/followups/steps, and bot-task-send delivers follow-ups', async (t) => {
+  const env = await startEnv({
+    forkImpl: async ({ sessionId }, makeForked) => {
+      const forkedId = makeForked()
+      const src = env.agentMap.get(sessionId)
+      const dst = env.agentMap.get(forkedId)
+      const copied = src.session.events.map(ev => ({ ...ev }))
+      dst.session.events.push(...copied)
+      dst.session.inheritedEventCount = copied.length
+      dst.session.seq = copied.length
+      return { sessionId: forkedId }
+    },
+  })
+  t.after(env.stop)
+  // Wire real DSH sessionController.page contract ({ address: { kind: 'session', sessionId } } -> { records: [{ event }], hasMore }).
+  env.ctx.sessionController.page = async ({ address, throughSeq, beforeSeq }) => {
+    const events = env.agentMap.get(address.sessionId)?.session.snapshotEvents() ?? []
+    const filtered = events.filter(ev => (throughSeq === undefined || ev.seq <= throughSeq) && (beforeSeq === undefined || ev.seq < beforeSeq))
+    return { records: filtered.map(event => ({ event })), hasMore: false }
+  }
+
+  const dmA = env.agentMap.get('dm-a')
+  // Seed unrelated prior foreground chat turns on dm-a.
+  await env.emit('dm-a', 'user/message', { source: { kind: 'user' }, content: [{ type: 'text', text: 'Prior unrelated foreground chat' }] })
+  await env.emit('dm-a', 'turn/start', { turn: 1 })
+  await env.emit('dm-a', 'assistant/message', { turn: 1, message: { role: 'assistant', content: [{ type: 'text', text: 'Foreground greeting reply' }] } })
+  await env.emit('dm-a', 'turn/end', { turn: 1, reason: { kind: 'completed' } })
+  dmA.session.seq = dmA.session.events.length
+
+  // 1) Forked task_start: taskPage must NOT include prior foreground chat.
+  await env.tool('task_start').execute({ title: 'Audit boundaries', brief: 'Inspect isolation boundary' }, execOf(dmA))
+  const forkedTask = env.rt.botOf('a').tasks[0]
+  assert.ok(forkedTask.startSeq > 0, 'forked task must persist startSeq boundary')
+  const forkedAgent = env.agentMap.get(forkedTask.sessionId)
+  forkedAgent.session.seq = forkedAgent.session.events.length + 10
+  await env.emit(forkedTask.sessionId, 'turn/start', { turn: 2 })
+  await env.emit(forkedTask.sessionId, 'tool/call', { callId: 'tc-1', name: 'read_file', arguments: {} })
+  await env.emit(forkedTask.sessionId, 'tool/result', { message: { toolCallId: 'tc-1', ok: true, content: [] } })
+  await env.emit(forkedTask.sessionId, 'assistant/message', { turn: 2, message: { role: 'assistant', content: [{ type: 'text', text: 'Boundary audit clean.' }] } })
+
+  // Send a follow-up via bot-task-send API.
+  const sendRes = await env.callApi('bot-task-send', { botId: 'a', taskId: forkedTask.id, text: 'Also check mobile.' })
+  assert.equal(sendRes.ok, true)
+  forkedAgent.session.seq = forkedAgent.session.events.length + 10
+
+  const pageRes = await env.callApi('bot-task-read', { botId: 'a', taskId: forkedTask.id, steps: true })
+  assert.equal(pageRes.ok, true)
+  const items = pageRes.value.items
+  assert.equal(items.some(it => String(it.text ?? '').includes('Prior unrelated foreground chat')), false, 'must exclude inherited foreground user turns')
+  assert.equal(items.some(it => String(it.text ?? '').includes('Foreground greeting reply')), false, 'must exclude inherited foreground bot turns')
+  assert.equal(items.some(it => it.kind === 'task-brief' && it.text.includes('Inspect isolation boundary')), true, 'must include cleaned task brief')
+  assert.equal(items.some(it => it.kind === 'user' && it.text === 'Also check mobile.'), true, 'must include user follow-up')
+  assert.equal(items.some(it => it.kind === 'bot' && it.text === 'Boundary audit clean.'), true, 'must include task reply')
+  assert.equal(items.some(it => it.kind === 'steps' && it.tools?.some(tool => tool.name === 'read_file' && tool.ok === true)), true, 'must include steps when requested')
+
+  // 2) fg-handoff: moving a busy foreground turn to background must record startSeq after the prior turn/end
+  //    so bot-task-read excludes earlier foreground chat, and pending approvals dynamically resolve taskId/taskTitle.
+  await env.emit('dm-a', 'user/message', { source: { kind: 'user' }, content: [{ type: 'text', text: 'Run full release check' }] })
+  await env.emit('dm-a', 'turn/start', { turn: 2 })
+  dmA.session.seq = dmA.session.events.length + 5
+  env.rt.live.set('dm-a', { turn: 2, since: Date.now() - 10_000, toolCount: 1, calls: new Set() })
+  await env.rt.handoffForeground(env.rt.botOf('a'), 'dm-a', [])
+  const movedTask = env.rt.botOf('a').tasks.find(item => item.origin === 'fg-handoff')
+  assert.ok(movedTask, 'fg-handoff must create a background task')
+  assert.ok(movedTask.startSeq > 0, 'fg-handoff must persist startSeq boundary')
+  const movedRes = await env.callApi('bot-task-read', { botId: 'a', taskId: movedTask.id })
+  assert.equal(movedRes.ok, true)
+  const movedItems = movedRes.value.items
+  assert.equal(movedItems.some(it => String(it.text ?? '').includes('Prior unrelated foreground chat')), false, 'fg-handoff taskPage must exclude prior foreground turns')
+  assert.equal(movedItems.some(it => it.kind === 'user' && it.text === 'Run full release check'), true, 'fg-handoff taskPage must include the moved turn prompt')
+
+  // 3) First-turn fg-handoff (startSeq === 0) + follow-up turn 2 must preserve turn 1 in bot-task-read.
+  const dmB = env.agentMap.get('dm-b')
+  await env.emit('dm-b', 'user/message', { source: { kind: 'user' }, content: [{ type: 'text', text: 'First turn prompt' }] })
+  await env.emit('dm-b', 'turn/start', { turn: 1 })
+  dmB.session.seq = dmB.session.events.length + 10
+  Object.assign(env.rt.live.get('dm-b'), { since: Date.now() - 10_000, toolCount: 1 })
+  await env.rt.handoffForeground(env.rt.botOf('b'), 'dm-b', [])
+  const firstTurnTask = env.rt.botOf('b').tasks[0]
+  assert.equal(firstTurnTask.startSeq, 0, 'first-turn fg-handoff must persist startSeq === 0')
+  await env.emit('dm-b', 'assistant/message', { turn: 1, message: { role: 'assistant', content: [{ type: 'text', text: 'Turn 1 interim reply' }] } })
+  // User sends a follow-up starting turn 2 before the task settles (simulated via live turn/end + turn/start).
+  await env.callApi('bot-task-send', { botId: 'b', taskId: firstTurnTask.id, text: 'Follow-up for turn 2' })
+  await env.emit('dm-b', 'turn/start', { turn: 2 })
+  await env.emit('dm-b', 'assistant/message', { turn: 2, message: { role: 'assistant', content: [{ type: 'text', text: 'Turn 2 reply' }] } })
+  dmB.session.seq = dmB.session.events.length + 10
+  const bothTurnsRes = await env.callApi('bot-task-read', { botId: 'b', taskId: firstTurnTask.id })
+  assert.equal(bothTurnsRes.ok, true)
+  assert.equal(bothTurnsRes.value.items.some(it => it.text === 'First turn prompt'), true, 'turn 1 prompt must be preserved when startSeq === 0')
+  assert.equal(bothTurnsRes.value.items.some(it => it.text === 'Turn 1 interim reply'), true, 'turn 1 reply must be preserved')
+  assert.equal(bothTurnsRes.value.items.some(it => it.text === 'Follow-up for turn 2'), true, 'turn 2 follow-up must be included')
+  assert.equal(bothTurnsRes.value.items.some(it => it.text === 'Turn 2 reply'), true, 'turn 2 reply must be included')
+
+  // 4) bot-task-send rejects cross-Bot taskId and read-only hosts.
+  const crossRes = await env.callApi('bot-task-send', { botId: 'a', taskId: firstTurnTask.id, text: 'Wrong bot' })
+  assert.equal(crossRes.ok, false)
+  env.rt.readOnly = () => 'Another host holds the team.'
+  const roSend = await env.callApi('bot-task-send', { botId: 'b', taskId: firstTurnTask.id, text: 'Read-only send' })
+  assert.equal(roSend.ok, false)
+  assert.equal(roSend.error?.code, 'bot/read-only')
+  env.rt.readOnly = () => undefined
 })

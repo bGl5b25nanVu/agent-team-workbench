@@ -31,11 +31,12 @@ export function install(rt) {
     if (botId === undefined) return next()
     const taskTitle = taskOwner === undefined ? undefined : rt.taskBySession?.(sessionId)?.task?.title
     const id = randomUUID()
+    const roomId = owner?.roomId ?? taskOwner?.roomId
     const entry = {
       id,
       sessionId,
       botId,
-      ...(owner ? { roomId: owner.roomId } : {}),
+      ...(roomId ? { roomId } : {}),
       ...(taskOwner ? { taskId: taskOwner.taskId, ...(taskTitle ? { taskTitle } : {}) } : {}),
       tool: String(request.toolName ?? ''),
       reason: String(request.reason ?? '').slice(0, 500),
@@ -50,7 +51,8 @@ export function install(rt) {
       if (!pending.has(id)) return false
       pending.delete(id)
       rt.noteApproval?.(sessionId, undefined)
-      emit('settled', { id, outcome, ...(taskOwner ? { taskId: taskOwner.taskId } : {}) })
+      const settledTaskId = entry.taskId ?? rt.taskOwners?.get(sessionId)?.taskId
+      emit('settled', { id, outcome, ...(settledTaskId ? { taskId: settledTaskId } : {}) })
       return true
     }
     if (owner === undefined && taskOwner === undefined) {
@@ -88,6 +90,10 @@ export function install(rt) {
       })
     }
     if (owner !== undefined) rt.yieldRoomTurn?.(sessionId)
+    else if (taskOwner?.roomId !== undefined) {
+      const groupSid = rt.roomOf(taskOwner.roomId)?.sessions?.[botId]
+      if (groupSid !== undefined) rt.yieldRoomTurn?.(groupSid)
+    }
     return new Promise((resolve) => {
       entry.answer = (outcome) => {
         if (!settle(outcome)) return
@@ -98,7 +104,15 @@ export function install(rt) {
     })
   }, { prepend: true })
 
-  const approvalsView = () => [...pending.values()].map(({ answer, ...entry }) => ({ ...entry, answerable: answer !== undefined }))
+  const approvalsView = () => [...pending.values()].map(({ answer, ...entry }) => {
+    const liveTask = entry.taskId === undefined ? rt.taskOwners?.get(entry.sessionId) : undefined
+    const liveTitle = entry.taskTitle ?? (liveTask === undefined ? undefined : rt.taskBySession?.(entry.sessionId)?.task?.title)
+    return {
+      ...entry,
+      ...(liveTask ? { taskId: liveTask.taskId, ...(liveTitle ? { taskTitle: liveTitle } : {}) } : {}),
+      answerable: answer !== undefined,
+    }
+  })
   const waitsForApproval = sessionId => [...pending.values()].some(entry => entry.sessionId === sessionId)
 
   function answerApproval(id, choice) {

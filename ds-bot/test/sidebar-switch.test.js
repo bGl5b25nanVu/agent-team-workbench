@@ -402,8 +402,8 @@ function collapsedGridRules() {
   const frames = []
   const visit = (rules, media = []) => {
     for (const rule of rules) {
-      if (rule.selectorText?.includes('[data-sidebar-collapsed][data-rightbar-collapsed]'))
-        frames.push({ selector: rule.selectorText, grid: rule.style.getPropertyValue('grid-template-columns'), media })
+      if (rule.selectorText?.includes('[data-sidebar-collapsed][data-rightbar-collapsed]') && rule.style.getPropertyValue('grid-template-columns'))
+        frames.push({ selector: rule.selectorText, grid: rule.style.getPropertyValue('grid-template-columns'), media, rule })
       if (rule.cssRules?.length)
         visit(rule.cssRules, rule.media ? [...media, rule.media.mediaText] : media)
     }
@@ -424,6 +424,31 @@ test('the collapsed shell grid override leaves layouts below 1024px to the host'
   assert.equal(frames.length, 1)
   assert.ok(frames[0].media.some(query => /^\(min-width:\s*1024px\)$/.test(query)),
     'the zero-width first track must not override a narrow host layout')
+})
+
+test('a narrow Bot conversation keeps an explicit track and leaves expanded host panels alone', () => {
+  const frames = collapsedGridRules().filter(frame => frame.media.includes('(max-width:1023px)'))
+  assert.equal(frames.length, 1)
+  const { rule } = frames[0]
+  assert.match(frames[0].grid, /^0px\s+minmax\(0,\s*1fr\)\s+0px$/)
+  assert.equal(rule.style.getPropertyPriority('grid-template-columns'), 'important')
+  const { document } = new JSDOM('<div class="x_frame" data-sidebar-collapsed data-rightbar-collapsed><div class="x_centerCol"><div class="bt-head"></div></div></div>').window
+  const frame = document.querySelector('.x_frame')
+  assert.ok(frame.matches(rule.selectorText))
+  for (const attribute of ['data-sidebar-collapsed', 'data-rightbar-collapsed']) {
+    frame.removeAttribute(attribute)
+    assert.equal(frame.matches(rule.selectorText), false)
+    frame.setAttribute(attribute, '')
+  }
+  const columnRule = [...rule.parentRule.cssRules].find(candidate => candidate.selectorText?.endsWith(`>[class*="_centerCol"]`))
+  assert.ok(columnRule, 'the narrow center column rule must exist')
+  assert.ok(document.querySelector('.x_centerCol').matches(columnRule.selectorText))
+  assert.equal(columnRule.style.getPropertyValue('grid-column'), '2')
+  assert.equal(columnRule.style.getPropertyValue('width'), 'auto')
+  for (const property of ['grid-column', 'width'])
+    assert.equal(columnRule.style.getPropertyPriority(property), 'important')
+  document.querySelector('.bt-head').remove()
+  assert.equal(frame.matches(rule.selectorText), false)
 })
 
 test('the narrow Bot grid yields when either shell track opens', () => {
@@ -821,6 +846,47 @@ test('installFrameWatch tracks data-sidebar-collapsed on DSH Desktop ancestor fr
       await new Promise(resolve => setTimeout(resolve, 30))
       assert.equal(frame.getSnapshot().collapsed, false)
     } finally { stop() }
+  })
+})
+
+test('installFrameWatch rescans the columns only when one it watches was replaced', async () => {
+  await withDom('<!doctype html><body><div class="frame"><div class="x_sidebarCol"></div><div class="x_centerCol"><div class="other"></div></div></div></body>', async ({ document }) => {
+    sandbox.Element = document.defaultView.Element
+    const observed = new Set()
+    sandbox.ResizeObserver = class { observe(node) { observed.add(node) } unobserve(node) { observed.delete(node) } disconnect() { observed.clear() } }
+    const scans = []
+    const all = document.querySelectorAll.bind(document)
+    document.querySelectorAll = (selector) => { if (selector.includes('_sidebarCol')) scans.push(selector); return all(selector) }
+    const frame = createSource({ viewport: 1280, sidebarWidth: 280, collapsedWidth: 0, collapsed: false })
+    const stop = installFrameWatch(frame)
+    const settle = () => new Promise(resolve => setTimeout(resolve, 30))
+    try {
+      assert.deepEqual([...observed], [document.querySelector('.x_sidebarCol'), document.querySelector('.x_centerCol')])
+      assert.equal(scans.length, 1)
+      document.querySelector('.other').append(document.createElement('span'))
+      await settle()
+      assert.equal(scans.length, 1, 'a mutation that leaves the columns in place does not rescan')
+      const old = document.querySelector('.x_sidebarCol')
+      const next = document.createElement('div')
+      next.className = 'x_sidebarCol'
+      old.replaceWith(next)
+      await settle()
+      assert.equal(scans.length, 2)
+      assert.equal(observed.has(old), false)
+      assert.equal(observed.has(next), true)
+      assert.equal(observed.size, 2)
+      const pane = document.createElement('div')
+      pane.className = 'x_centerCol'
+      document.querySelector('.frame').append(pane)
+      await settle()
+      assert.equal(scans.length, 3, 'a column added next to the watched ones is picked up')
+      assert.equal(observed.has(pane), true)
+      assert.equal(observed.size, 3)
+    } finally {
+      stop()
+      delete sandbox.ResizeObserver
+      delete sandbox.Element
+    }
   })
 })
 

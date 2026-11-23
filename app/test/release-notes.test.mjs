@@ -128,8 +128,36 @@ test('the script stops when a package is missing, so the release is not marked L
   assert.match(run.stderr, /has no DS-Bot-0\.2\.3-win-x64\.exe$/mu)
 })
 
-// A releases/latest link must never reach a release whose files are still being attached.
-test('the release becomes Latest last, after every job that attaches files', () => {
+test('optional packages can be omitted without failing, while required desktop packages stay enforced', (t) => {
+  const work = mkdtempSync(join(tmpdir(), 'ds-bot-release-notes-opt-'))
+  t.after(() => { rmSync(work, { recursive: true, force: true }) })
+  const from = join(work, 'packages')
+  const to = join(work, 'attach')
+  mkdirSync(from)
+  for (const name of names('0.2.3').filter(item => !item.endsWith('-android.apk'))) writeFileSync(join(from, name), `package ${name}`)
+  const env = { ...process.env, GITHUB_REPOSITORY: '', MIRROR_BASE: '' }
+  const okRun = spawnSync(process.execPath, [script, '--optional', 'android.apk', '0.2.3', from, to], { encoding: 'utf8', env })
+  assert.equal(okRun.status, 0, okRun.stderr)
+  assert.doesNotMatch(okRun.stdout, /android\.apk/u)
+  assert.equal(okRun.stdout.split('\n').filter(line => line.startsWith('| ') && !line.startsWith('| System')).length, 5)
+  const expectedCopies = PACKAGES.filter(entry => entry.file !== 'android.apk').map(copyName)
+  assert.deepEqual(readdirSync(to).sort(), [...expectedCopies, 'SHA256SUMS.txt'].sort())
+  const sums = readFileSync(join(to, 'SHA256SUMS.txt'), 'utf8').trim().split('\n')
+  assert.equal(sums.length, 10)
+
+  const failDir = join(work, 'missing-win')
+  mkdirSync(failDir)
+  for (const name of names('0.2.3').filter(item => !item.endsWith('-android.apk') && !item.endsWith('-win-x64.exe'))) {
+    writeFileSync(join(failDir, name), name)
+  }
+  const failRun = spawnSync(process.execPath, [script, '--optional', 'android.apk', '0.2.3', failDir, join(work, 'fail-attach')], { encoding: 'utf8', env })
+  assert.equal(failRun.status, 1)
+  assert.match(failRun.stderr, /has no DS-Bot-0\.2\.3-win-x64\.exe$/mu)
+})
+
+// A releases/latest link must never reach a release whose files are still being attached,
+// and no installer asset may be uploaded to the release before publish and all builds succeed.
+test('the release becomes Latest last, after every build and publish job', () => {
   const workflow = YAML.parse(read('../../.github/workflows/release.yml'))
   const runs = job => (job.steps ?? []).map(step => step.run ?? '').join('\n')
   const latest = Object.entries(workflow.jobs).filter(([, job]) => /gh release edit "\$TAG" --latest/u.test(runs(job)))
@@ -139,9 +167,19 @@ test('the release becomes Latest last, after every job that attaches files', () 
     for (const need of [workflow.jobs[jobName].needs ?? []].flat()) if (!seen.has(need)) before(need, seen.add(need))
     return seen
   }
-  const uploaders = Object.keys(workflow.jobs).filter(other => other !== name && /gh release upload/u.test(runs(workflow.jobs[other])))
-  assert.ok(uploaders.length >= 4)
-  for (const uploader of uploaders) assert.ok(before(name).has(uploader), `${name} must come after ${uploader}`)
+  const producers = Object.keys(workflow.jobs).filter((other) => {
+    if (other === name) return false
+    const steps = workflow.jobs[other].steps ?? []
+    return /gh release upload/u.test(runs(workflow.jobs[other]))
+      || steps.some(step => typeof step.uses === 'string' && step.uses.startsWith('actions/upload-artifact@'))
+  })
+  assert.ok(producers.length >= 5, `expected at least 5 build/publish jobs before ${name}, found ${producers.join(', ')}`)
+  for (const producer of producers) assert.ok(before(name).has(producer), `${name} must come after ${producer}`)
+  // No app build job may attach assets directly to the GitHub release before publish succeeds.
+  for (const [other, cfg] of Object.entries(workflow.jobs)) {
+    if (other === name || other === 'publish') continue
+    assert.doesNotMatch(runs(cfg), /gh release upload/u, `${other} must not upload directly to the release before publish passes`)
+  }
   assert.match(job.steps.at(-1).run, /^gh release edit "\$TAG" --latest$/u)
   assert.match(runs(job), /node scripts\/release-notes\.mjs /u)
 })

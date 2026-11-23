@@ -36,8 +36,8 @@ test('global settings and group-scoped team settings remain distinct', () => {
     assert.ok(!source.includes("t('Team settings')"), `${name} must not relabel global settings`)
   }
   const text = name => sources.find(([file]) => file === name)[1]
-  assert.match(text('sidebar.js'), /\[t\('Settings'\), GearIcon, \(\) => actions\.openSettings\('general'\)\]/)
-  assert.match(text('palette.js'), /title: t\('Settings'\), run: \(\) => actions\.openSettings\('general'\)/)
+  assert.match(text('sidebar.js'), /\[t\('Settings'\), GearIcon, \(\) => actions\.openSettings\('overview'\)\]/)
+  assert.match(text('palette.js'), /title: t\('Settings'\), run: \(\) => actions\.openSettings\('overview'\)/)
   assert.match(text('team-dashboard.js'), /'aria-label': t\('Team settings'\), onClick: \(\) => actions\.openSettings\('groups', room\.id\)/)
   // One Bot's own entries open that Bot, so they read Edit Bot instead.
   assert.match(text('context-menu.js'), /\[t\('Edit Bot'\), GearIcon, \(\) => actions\.openSettings\('bots', bot\.id\)\]/)

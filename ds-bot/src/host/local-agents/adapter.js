@@ -6,10 +6,13 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { LlmAdapter, LlmError, offloadedImageText, resolveImageAttachmentAccess, textOnlyImageText } from '@deepseek-ai/dsh-llm'
 import { textOf } from '../text.js'
-import { engineOf, cliMode } from './engines.js'
+import { engineOf, cliMode, signInFor } from './engines.js'
 import { LoopbackMcp } from './mcp.js'
 
 export const DEFAULT_CONTEXT_WINDOW = 200_000
+// A window belongs to the model, not to the Session that reported it, and the model
+// card reads it from resolveModel rather than from the Session's own figures.
+const windowKey = (route, model) => `${route}\u0000${model}`
 // The replay window when a CLI session is new or its resume failed.
 const REPLAY_MESSAGES = 12
 const REPLAY_BYTES = 24 * 1024
@@ -66,6 +69,7 @@ export class LocalAgentAdapter extends LlmAdapter {
     this.engines = new Map()   // route -> engine driver
     this.live = new Map()      // sessionId -> live session
     this.modelCache = new Map()
+    this.windows = new Map()   // route\0model -> the window the CLI reported for it
     this.probes = new Map()    // route -> the probe under way
     this.sideRequests = new Set()
     this.disposed = false
@@ -123,7 +127,7 @@ export class LocalAgentAdapter extends LlmAdapter {
       this.modelCache.set(route, (models ?? []).filter(model => model.id !== 'default')
         .map(model => ({ provider: route, id: model.id, name: model.name ?? model.id, ...(model.reasoning ? { reasoning: model.reasoning } : {}) })))
     } catch { /* the menu still has the CLI's default */ }
-    if (!this.engineInUse(engine)) await engine.close?.().catch(() => {})
+    if (!this.engineInUse(engine, route)) await engine.close?.().catch(() => {})
   }
 
   dropModelCache(route) {
@@ -140,7 +144,7 @@ export class LocalAgentAdapter extends LlmAdapter {
       id: model,
       name: listed?.name ?? model,
       inputModalities: supportsImage ? ['text', 'image'] : ['text'],
-      context: { contextWindow: spec?.contextWindow ?? DEFAULT_CONTEXT_WINDOW },
+      context: { contextWindow: spec?.contextWindow ?? this.windows.get(windowKey(route, model)) ?? DEFAULT_CONTEXT_WINDOW },
       // The thinking levels the engine advertises for this model, if any.
       ...(listed?.reasoning ? { reasoning: listed.reasoning } : {}),
     }
@@ -207,7 +211,7 @@ export class LocalAgentAdapter extends LlmAdapter {
     }
     live.push = (event) => {
       this.observe(live, event)
-      if (live.mute && live.state === 'idle' && (event?.type === 'text' || event?.type === 'thought' || event?.type === 'activity')) return
+      if (live.mute && live.state === 'idle' && (event?.type === 'text' || event?.type === 'thought' || event?.type === 'activity' || event?.type === 'status')) return
       clearTimeout(live.idle)
       live.idle = setTimeout(() => void this.closeLive(live, { idle: true }), IDLE_CLOSE_MS)
       live.idle.unref?.()
@@ -249,10 +253,20 @@ export class LocalAgentAdapter extends LlmAdapter {
       return
     }
     if (event?.type === 'context') {
-      const size = Number.isFinite(event.size) && event.size > 0 ? event.size : live.context?.size
+      // A size the CLI reports now, as against one carried by the Session from its
+      // record: only the former is this model's window.
+      const reported = Number.isFinite(event.size) && event.size > 0 ? event.size : undefined
+      const size = reported ?? live.context?.size
       live.context = Number.isFinite(event.used)
         ? { used: event.used, ...(size === undefined ? {} : { size }) }
         : { ...live.context, ...(size === undefined ? {} : { size }) }
+      // The same figure is the model's window: the model card and the percentage it
+      // renders read it from resolveModel, so it is kept for the route and model this
+      // Session runs, not for this Session alone (#1823). A usage-only report carries
+      // no size, and the Session may still hold the size of the model it ran before:
+      // publishing that one under this model's key would give the new model a window
+      // nothing has reported for it.
+      if (reported !== undefined) this.windows.set(windowKey(live.route, live.model), reported)
       this.deps.patchRecord?.(live.sessionId, { context: live.context })
       return
     }
@@ -294,6 +308,7 @@ export class LocalAgentAdapter extends LlmAdapter {
   engineInUse(engine, except) {
     return [...this.live.values()].some(other => other.engine === engine && !other.dead)
       || [...this.sideRequests].some(request => request !== except && request.engine === engine)
+      || [...this.probes.keys()].some(route => route !== except && this.engines.get(route) === engine)
   }
 
   async closeLive(live, { idle = false } = {}) {
@@ -317,6 +332,7 @@ export class LocalAgentAdapter extends LlmAdapter {
   // The turn under way ends: the CLI stops, and a call it waits on gets an answer.
   stopTurn(live, reason) {
     live.state = 'idle'
+    live.stopped = true
     live.queue.length = 0
     const stopped = live.engineSession === undefined ? undefined : live.engine.cancel?.(live.engineSession)
     live.mcp?.failAll(new Error(reason))
@@ -633,6 +649,10 @@ export class LocalAgentAdapter extends LlmAdapter {
 
   // Codex resolves on acceptance; ACP resolves only when the entire turn ends.
   startTurn(live, input, signal, effort) {
+    if (live.stopped) {
+      this.discardTurnOutput(live)
+      live.stopped = false
+    }
     const blocks = typeof input === 'string' ? [{ type: 'text', text: input }] : input
     live.state = 'running'
     // The turn an engine names is the one this stream reads: a finished turn's late
@@ -641,7 +661,7 @@ export class LocalAgentAdapter extends LlmAdapter {
     try {
       const started = Promise.resolve(live.engine.prompt(live.engineSession, blocks, { signal, effort }))
         .then((turnId) => { if (live.spec.kind === 'codex' && turnId !== undefined) live.turnTag = turnId })
-        .catch(error => live.push({ type: 'error', error }))
+        .catch(error => { if (!signal?.aborted) live.push({ type: 'error', error }) })
       return live.spec.kind === 'acp' ? Promise.resolve() : started
     } catch (error) {
       live.push({ type: 'error', error })
@@ -725,9 +745,13 @@ export class LocalAgentAdapter extends LlmAdapter {
     const onAbort = () => abortReject(options.signal?.reason ?? new Error('aborted'))
     if (options.signal?.aborted) onAbort()
     else options.signal?.addEventListener('abort', onAbort)
+    const report = payload => this.deps.rt?.noteLocalAgentEvent?.(live.sessionId, payload)
     try {
     for (;;) {
-      const event = await Promise.race([live.next(), abortPromise]).catch(error => ({ type: 'abort', error }))
+      const next = this.take(live)
+      const event = await Promise.race([next.event, abortPromise])
+        .catch(error => ({ type: 'abort', error }))
+        .finally(() => next.drop())
       if (event.type === 'abort') {
         this.stopTurn(live, 'the turn was stopped')
         yield { type: 'finish', reason: { kind: 'aborted', failure: { code: 'ABORTED', message: 'the turn was stopped' } } }
@@ -737,6 +761,7 @@ export class LocalAgentAdapter extends LlmAdapter {
       if (event.type !== 'permission' && event.type !== 'call' && event.turnId !== undefined && live.turnTag !== undefined && event.turnId !== live.turnTag) continue
       switch (event.type) {
         case 'text': {
+          report(event)
           if (textIndex === -1) {
             if (thinkIndex !== -1) { yield { type: 'block-end', index: thinkIndex, block: { type: 'reasoning', text: thinkBuf } }; thinkIndex = -1; thinkBuf = '' }
             yield { type: 'block-start', index: index++, blockType: 'text' }
@@ -748,6 +773,7 @@ export class LocalAgentAdapter extends LlmAdapter {
         }
         case 'thought':
         case 'activity': {
+          report(event)
           // An activity line stands on its own line of the reasoning, which is
           // how the chat tells it from the thought around it.
           const text = event.type === 'activity' ? `${thinkBuf === '' || thinkBuf.endsWith('\n') ? '' : '\n'}${event.text}\n` : event.text
@@ -760,6 +786,9 @@ export class LocalAgentAdapter extends LlmAdapter {
           yield { type: 'reasoning-delta', index: thinkIndex, text }
           break
         }
+        case 'status':
+          report(event)
+          break
         case 'usage': yield addUsage(event.usage); break
         case 'call': {
           yield* closeBlocks()
@@ -816,6 +845,7 @@ export class LocalAgentAdapter extends LlmAdapter {
       }
     }
     } finally {
+      report({ type: 'idle' })
       options.signal?.removeEventListener('abort', onAbort)
     }
   }
@@ -1045,7 +1075,7 @@ export class LocalAgentAdapter extends LlmAdapter {
     this.disposed = true
     const requests = [...this.sideRequests]
     for (const request of requests) request.controller.abort(new LlmError('the local agents adapter is disposed', 'NO_ADAPTER'))
-    await Promise.all(requests.filter(request => request.isolated).map(request => request.engine.close?.().catch(() => {})))
+    await Promise.all([...new Set(requests.map(request => request.engine))].map(engine => engine.close?.().catch(() => {})))
     await Promise.all(requests.map(request => request.done.promise))
     for (const live of Array.from(this.live.values())) await this.closeLive(live)
     for (const engine of Array.from(this.engines.values())) await engine.close?.().catch(() => {})
@@ -1162,18 +1192,47 @@ async function renderReplay(messages, system, resolveImage) {
 // Bot's repair card can act on them.
 function toLlmError(error, live) {
   if (error instanceof LlmError) return error
-  const text = errorText(error)
+  const upstream = [error?.data?.error, error?.data].filter(value => value !== null && typeof value === 'object' && !Array.isArray(value))
+  const text = [...new Set([errorText(error), ...upstream.flatMap(value => [value.message, value.detail]).filter(nonEmptyString)])].join('\n')
+  const upstreamCode = upstream.map(value => value?.code).find(nonEmptyString)
   // A CLI whose context is past its window: the part moves on the way an overflow does.
   const overflow = /prompt is too long|context.?(window|length).?(exceeded|is full)|context_length_exceeded|exceeds the (model's )?(maximum )?context|too many tokens/i
   const code = error?.code === 'NO_ADAPTER' ? 'LOCAL_AGENT_MISSING'
-    : overflow.test(text) ? 'CONTEXT_WINDOW_EXCEEDED'
-      : /not signed in|not logged in|login required|unauthorized|authentication/i.test(text) ? 'LOCAL_AGENT_SIGNIN'
-        : /quota|rate.?limit|usage limit|exceeded/i.test(text) ? 'LOCAL_AGENT_QUOTA'
-          : /exited|spawn|ENOENT/i.test(text) ? 'LOCAL_AGENT_EXIT'
-            : typeof error?.code === 'string' && error.code !== '' ? error.code : 'LOCAL_AGENT_ERROR'
-  const hint = code === 'LOCAL_AGENT_SIGNIN' ? ` Sign in with: ${live?.spec?.signIn ?? `${live?.spec?.command ?? 'the CLI'} login`}.` : ''
+    : upstreamCode !== undefined ? repairCode(upstreamCode) ?? upstreamCode
+      : repairCode(error?.code) ?? (
+        overflow.test(text) ? 'CONTEXT_WINDOW_EXCEEDED'
+          : /not signed in|not logged in|login required|unauthorized|authentication|auth failed/i.test(text) ? 'LOCAL_AGENT_SIGNIN'
+            : /quota|rate.?limit|usage limit|exceeded/i.test(text) ? 'LOCAL_AGENT_QUOTA'
+              : /exited|spawn|ENOENT/i.test(text) ? 'LOCAL_AGENT_EXIT'
+                : nonEmptyString(error?.code) ? error.code : 'LOCAL_AGENT_ERROR')
+  const hint = code === 'LOCAL_AGENT_SIGNIN' ? ` Sign in with: ${signInFor(live?.spec, live?.engine?.bin) ?? `${live?.spec?.command ?? 'the CLI'} login`}.` : ''
   const rpcCode = code === 'LOCAL_AGENT_ERROR' && typeof error?.code === 'number' ? ` (JSON-RPC ${error.code})` : ''
-  return new LlmError(`${text}${rpcCode}${hint}`, code, error?.status === undefined ? {} : { status: error.status })
+  const status = [...upstream, error].map(value => value?.status).find(value => Number.isInteger(value) && value >= 100 && value <= 599)
+  return new LlmError(`${text}${rpcCode}${hint}`, code, status === undefined ? {} : { status })
+}
+
+function repairCode(code) {
+  switch (typeof code === 'string' ? code.toLowerCase().replace(/-/g, '_') : undefined) {
+    case 'auth_failed':
+    case 'unauthorized':
+    case 'unauthenticated':
+    case 'authentication_failed':
+    case 'not_logged_in':
+      return 'LOCAL_AGENT_SIGNIN'
+    case 'rate_limit_exceeded':
+    case 'quota_exceeded':
+    case 'insufficient_quota':
+    case 'usage_limit_exceeded':
+      return 'LOCAL_AGENT_QUOTA'
+    case 'context_length_exceeded':
+      return 'CONTEXT_WINDOW_EXCEEDED'
+    default:
+      return undefined
+  }
+}
+
+function nonEmptyString(value) {
+  return typeof value === 'string' && value.trim() !== ''
 }
 
 // JSON-RPC errors carry numeric codes and may arrive as plain objects; LlmError
