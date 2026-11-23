@@ -3,13 +3,13 @@
 // releases/latest/download/ link can name.
 // Usage: node scripts/release-notes.mjs <version> <folder with the packages> <folder for the files to attach> [<current notes>]
 // It prints the notes with the table on top. MIRROR_BASE, when set, is a URL that holds the
-// packages under the same names; GITHUB_REPOSITORY names the repository (default Fei2411/DS-Bot).
+// packages under the same names; GITHUB_REPOSITORY names the repository (default bGl5b25nanVu/agent-team-workbench).
 import { createHash } from 'node:crypto'
 import { copyFileSync, createReadStream, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const REPO = 'Fei2411/DS-Bot'
+export const REPO = 'bGl5b25nanVu/agent-team-workbench'
 // The order of the table: Windows first, where most downloads are; the phone app last.
 export const PACKAGES = [
   { file: 'win-x64.exe', system: '**Windows 10/11 (64-bit / 64 位)**', note: 'Double-click to install / 双击安装' },
@@ -28,9 +28,10 @@ export const packageName = (version, entry) => `DS-Bot-${version}-${entry.file}`
 export const copyName = entry => `DS-Bot-${entry.file}`
 
 /** @returns {string[]} the packages of `version` that are not among `names` */
-export function missingPackages(version, names) {
+export function missingPackages(version, names, optional = []) {
   const have = new Set(names)
-  return PACKAGES.map(entry => packageName(version, entry)).filter(name => !have.has(name))
+  const skip = new Set(optional)
+  return PACKAGES.filter(entry => !skip.has(entry.file)).map(entry => packageName(version, entry)).filter(name => !have.has(name))
 }
 
 export function formatSize(bytes) {
@@ -46,12 +47,12 @@ function mirrorUrl(mirror, name) {
 }
 
 /** `sizes`: bytes by package name. Without `mirror` each package has its GitHub link only. */
-export function downloadBlock({ version, sizes, repo = REPO, mirror }) {
+export function downloadBlock({ version, sizes, repo = REPO, mirror, packages = PACKAGES }) {
   const links = (name) => {
     const github = releaseUrl({ repo, version, name })
     return mirror ? `${name}: [Mirror / 国内镜像](${mirrorUrl(mirror, name)}) · [GitHub](${github})` : `[${name}](${github})`
   }
-  const rows = PACKAGES.map((entry) => {
+  const rows = packages.map((entry) => {
     const name = packageName(version, entry)
     const system = entry.note === undefined ? entry.system : `${entry.system}<br>${entry.note}`
     return `| ${system} | ${links(name)} | ${formatSize(sizes[name])} |`
@@ -75,8 +76,8 @@ export function downloadBlock({ version, sizes, repo = REPO, mirror }) {
 }
 
 /** `hashes`: SHA-256 hex by package name. Each package is listed under both of its names. */
-export function checksums(version, hashes) {
-  const lines = PACKAGES.flatMap((entry) => {
+export function checksums(version, hashes, packages = PACKAGES) {
+  const lines = packages.flatMap((entry) => {
     const hash = hashes[packageName(version, entry)]
     return [`${hash}  ${packageName(version, entry)}`, `${hash}  ${copyName(entry)}`]
   })
@@ -98,27 +99,43 @@ async function sha256(file) {
   return hash.digest('hex')
 }
 
-async function main([version, from, to, notesFile]) {
+async function main(argv) {
+  const optional = new Set()
+  const args = []
+  for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] === '--optional') {
+      const value = argv[index + 1]
+      if (!value) {
+        console.error('release-notes: --optional requires a package suffix (e.g. android.apk)')
+        process.exit(2)
+      }
+      optional.add(value)
+      index += 1
+    } else args.push(argv[index])
+  }
+  const [version, from, to, notesFile] = args
   if (!version || !from || !to) {
-    console.error('release-notes: usage: node scripts/release-notes.mjs <version> <folder with the packages> <folder for the files to attach> [<current notes>]')
+    console.error('release-notes: usage: node scripts/release-notes.mjs [--optional <suffix>] <version> <folder with the packages> <folder for the files to attach> [<current notes>]')
     process.exit(2)
   }
-  const missing = missingPackages(version, readdirSync(from))
+  const present = new Set(readdirSync(from))
+  const missing = missingPackages(version, [...present], optional)
   if (missing.length > 0) {
     console.error(`release-notes: ${from} has no ${missing.join(', ')}`)
     process.exit(1)
   }
+  const included = PACKAGES.filter(entry => present.has(packageName(version, entry)))
   mkdirSync(to, { recursive: true })
   const sizes = {}
   const hashes = {}
-  for (const entry of PACKAGES) {
+  for (const entry of included) {
     const name = packageName(version, entry)
     sizes[name] = statSync(join(from, name)).size
     hashes[name] = await sha256(join(from, name))
     copyFileSync(join(from, name), join(to, copyName(entry)))
   }
-  writeFileSync(join(to, SUMS), checksums(version, hashes))
-  const block = downloadBlock({ version, sizes, repo: process.env.GITHUB_REPOSITORY || REPO, mirror: process.env.MIRROR_BASE || undefined })
+  writeFileSync(join(to, SUMS), checksums(version, hashes, included))
+  const block = downloadBlock({ version, sizes, repo: process.env.GITHUB_REPOSITORY || REPO, mirror: process.env.MIRROR_BASE || undefined, packages: included })
   process.stdout.write(withDownloads(notesFile === undefined ? '' : readFileSync(notesFile, 'utf8'), block))
 }
 

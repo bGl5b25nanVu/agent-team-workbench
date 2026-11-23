@@ -1,22 +1,24 @@
 // Bot and group management screens, mirroring the desktop details drawer and
 // settings forms: Bot details, Edit Bot, Create Bot, group settings, and the
 // "new" sheet. Every write goes through the same endpoints the desktop calls.
-import { useCallback, useContext, useEffect, useState } from 'react'
+import { Children, Fragment, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useIsFocused } from '@react-navigation/native'
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { confirmDanger, Sheet, SheetHeader, useInSheet } from '../nav/sheet.tsx'
+import { openChat } from '../nav/open-chat.ts'
 import * as Crypto from 'expo-crypto'
 import { listComputers, removeComputer, type StoredComputer } from '../store.ts'
 import { ComputersCtx } from '../nav/computers.ts'
 import * as ImagePicker from 'expo-image-picker'
 import { useTeam } from '../team/context.tsx'
-import { t, timeLabel } from '../ui/i18n.ts'
+import { memorySummaryText } from '../team/memory.ts'
+import { t, timeLabel, weekdayShort } from '../ui/i18n.ts'
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, GearIcon } from '../ui/icons.tsx'
 import { Avatar, COLOR_PAINT, RoomAvatar } from '../ui/marks.tsx'
 import { inkColor, radius, shadow, type as typeScale, useTheme, type Palette } from '../ui/tokens.ts'
 import type { Bot, Room, TeamState } from '../connection.ts'
-import { capabilityStatusText } from './settings-pages.tsx'
+import { capabilityStatusText } from '../team/capabilities.ts'
 import { ModelMenu, ModelPicker } from './model-menu.tsx'
 
 export const SHAPES = ['acorn', 'berry', 'bunny', 'gem', 'gumdrop', 'kitty', 'moon', 'peanut', 'star', 'wave']
@@ -61,10 +63,18 @@ export function BackRow({ title, onBack, end }: { title: string; onBack: () => v
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   const { p } = useTheme()
+  const items = Children.toArray(children).filter(Boolean)
   return (
     <View style={{ marginTop: 18 }}>
       <Text style={[typeScale.caption, { color: p.ink3, paddingHorizontal: 18, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.6, fontSize: 11 }]}>{label}</Text>
-      <View style={[styles.card, { backgroundColor: p.card, borderColor: p.line }]}>{children}</View>
+      <View style={[styles.card, { backgroundColor: p.card, borderColor: p.line }]}>
+        {items.map((child, i) => (
+          <Fragment key={i}>
+            {i > 0 ? <View style={[styles.divider, { backgroundColor: p.line }]} /> : null}
+            {child}
+          </Fragment>
+        ))}
+      </View>
     </View>
   )
 }
@@ -73,13 +83,13 @@ function Row({ label, hint, value, onPress, disabled, end }: { label: string; hi
   const { p } = useTheme()
   const body = (
     <View style={styles.row}>
-      <View style={{ flex: 1 }}>
+      <View style={{ flex: 1, minWidth: 96 }}>
         <Text style={[typeScale.settingsRow, { color: p.ink }]}>{label}</Text>
         {hint ? <Text style={[typeScale.small, { color: p.ink3, marginTop: 2 }]}>{hint}</Text> : null}
       </View>
-      {value !== undefined ? <Text style={[typeScale.settingsRow, { color: p.ink2 }]} numberOfLines={1}>{value}</Text> : null}
+      {value !== undefined ? <Text style={[typeScale.settingsRow, { color: p.ink2, flexShrink: 1, maxWidth: '54%', textAlign: 'right' }]} numberOfLines={1}>{value}</Text> : null}
       {end}
-      {onPress ? <ChevronRightIcon size={16} color={p.ink3} /> : null}
+      {onPress ? <View style={{ flexShrink: 0 }}><ChevronRightIcon size={16} color={p.ink3} /></View> : null}
     </View>
   )
   if (!onPress || disabled) return <View style={disabled ? { opacity: 0.45 } : null}>{body}</View>
@@ -152,9 +162,14 @@ function DangerRow({ label, confirm, busy, onConfirm }: { label: string; confirm
 
 type Model = NonNullable<TeamState['models']>[number]
 
+// The last segment of a host path, Windows or POSIX; a root keeps its own spelling.
+const folderName = (path: string) => path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path
+
 function useWrite(navigation: any) {
   const { call } = useTeam()
   const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const inflight = useRef(false)
   const run = async (name: string, body: Record<string, unknown>, done?: (value: unknown) => void) => {
     try { const value = await call(name, body); setError(null); done?.(value) }
     catch (failure) {
@@ -163,7 +178,15 @@ function useWrite(navigation: any) {
       setError((failure as Error)?.message ?? String(failure))
     }
   }
-  return { run, error }
+  // For a write that leaves the screen when it lands: a second tap while the first is
+  // in flight would write twice and go back twice. A failure frees it to be tried again.
+  const once: typeof run = async (...args) => {
+    if (inflight.current) return
+    inflight.current = true
+    setBusy(true)
+    try { await run(...args) } finally { inflight.current = false; setBusy(false) }
+  }
+  return { run, once, error, busy }
 }
 
 // Like the desktop, a Bot or group the user just made (or duplicated) opens
@@ -176,7 +199,7 @@ function useOpenWhenListed(navigation: any) {
     const listed = target.kind === 'bot' ? botOf(team, target.id) !== undefined : (team?.rooms ?? []).some(room => room.id === target.id)
     if (!listed) return
     setTarget(null)
-    navigation.popTo('Chat', target)
+    openChat(navigation, target)
   }, [target, team])
   return setTarget
 }
@@ -223,7 +246,7 @@ export function BotDetails({ route, navigation }: any) {
         <DetailTitle text={t('Working folder')} />
         <Pressable accessibilityRole="button" onPress={() => navigation.navigate('Folder', { current: bot.workDir, onPick: 'bot', botId: bot.id })}
           style={[styles.dropdown, { backgroundColor: p.card, borderColor: p.line }]}>
-          <Text style={[typeScale.settingsRow, { color: p.ink, flex: 1 }]} numberOfLines={1}>{bot.workDir ? bot.workDir.split(/[\\/]/).filter(Boolean).pop() : t('Team workspace')}</Text>
+          <Text style={[typeScale.settingsRow, { color: p.ink, flex: 1 }]} numberOfLines={1}>{bot.workDir ? folderName(bot.workDir) : t('Team workspace')}</Text>
           <Text style={{ color: p.ink3, fontSize: 12 }}>⌄</Text>
         </Pressable>
         {bot.instructions
@@ -351,7 +374,7 @@ function ScheduleSummary({ bot, onOpen }: { bot: Bot; onOpen: () => void }) {
       <DetailTitle text={tasks.length === 0 ? t('Scheduled tasks') : t('Scheduled tasks · {count}', { count: tasks.length })} />
       {tasks.length === 0
         ? <Pressable accessibilityRole="button" onPress={onOpen} style={{ minHeight: 32, justifyContent: 'center' }}>
-            <Text style={[typeScale.small, { color: p.ink3 }]}>{view?.available === false ? t('Switch on Automation tasks on the Plugins page in Harness settings.') : t('No scheduled tasks yet. Add one')}</Text>
+            <Text style={[typeScale.small, { color: p.ink3 }]}>{view?.available === false ? t('Switch on Automation tasks on the Plugins page in Settings.') : t('No scheduled tasks yet. Add one')}</Text>
           </Pressable>
         : tasks.slice(0, 3).map(task => (
             <Pressable key={task.id} accessibilityRole="button" onPress={onOpen} style={{ minHeight: 36, justifyContent: 'center' }}>
@@ -436,7 +459,7 @@ export function BotEdit({ route, navigation }: any) {
         <BotCapabilities bot={bot} team={team} run={run} />
         <Section label={t('Bot')}>
           {bot.private === true ? null : <Row label={t('Duplicate')} hint={t('A copy with the same job and model, and fresh memory.')} onPress={() => void run('duplicate-bot', { id: bot.id }, value => open({ kind: 'bot', id: (value as Bot).id }))} />}
-          <DangerRow label={t('Delete Bot')} confirm={t('Delete {name}?', { name: bot.name })} onConfirm={() => void run('delete-bot', { id: bot.id }, () => navigation.popTo('Chat'))} />
+          <DangerRow label={t('Delete Bot')} confirm={t('Delete {name}?', { name: bot.name })} onConfirm={() => void run('delete-bot', { id: bot.id }, () => openChat(navigation))} />
         </Section>
       </ScrollView>
     </Screen>
@@ -607,28 +630,43 @@ export function GroupSettings({ route, navigation }: any) {
               options={ROOM_MODES.map(([id, label]) => ({ id, label: t(label) }))} />
           </View>
         </Section>
+        <Section label={t('Working folder')}>
+          <Row label={t('Folder')} value={room.workDir ? folderName(room.workDir) : t("Each Bot's own folder")}
+            onPress={() => navigation.navigate('Folder', { current: room.workDir, onPick: 'room', roomId: room.id })} />
+        </Section>
         {/* Tick to add or remove a member; among members, the admin is marked and
             another member can take the role. */}
         <Section label={t('Members · {count}', { count: members.size })}>
           {bots.map(bot => {
             const inRoom = members.has(bot.id)
             const leads = room.admin === bot.id
+            const toggleMember = () => update({ members: inRoom ? [...members].filter(id => id !== bot.id) : [...members, bot.id] })
             return (
-              <Pressable key={bot.id} accessibilityRole="checkbox" accessibilityState={{ checked: inRoom }} onPress={() => update({ members: inRoom ? [...members].filter(id => id !== bot.id) : [...members, bot.id] })}
-                style={({ pressed }) => [styles.row, pressed && { backgroundColor: p.hover }]}>
-                <Avatar bot={bot} dark={dark} size={32} ring={p.card} />
-                <Text style={[typeScale.settingsRow, { color: p.ink, flex: 1, marginLeft: 10 }]} numberOfLines={1}>{bot.name}</Text>
-                {leads ? <Text accessibilityRole="button" onPress={() => update({ admin: null })} suppressHighlighting style={[typeScale.caption, styles.adminTag, { color: p.accent, backgroundColor: p.hover }]}>{t('Admin')}</Text>
-                  : inRoom ? <Text accessibilityRole="button" onPress={() => update({ admin: bot.id })} suppressHighlighting style={[typeScale.caption, { color: p.ink3, paddingHorizontal: 6, paddingVertical: 10 }]}>{t('Make admin')}</Text> : null}
-                <View style={[styles.check, { marginLeft: 8, borderColor: inRoom ? p.accent : p.line2, backgroundColor: inRoom ? p.accent : 'transparent' }]}>
+              <View key={bot.id} style={styles.row}>
+                <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: inRoom }} onPress={toggleMember}
+                  style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center' }}>
+                  <Avatar bot={bot} dark={dark} size={32} ring={p.card} />
+                  <Text style={[typeScale.settingsRow, { color: p.ink, flex: 1, minWidth: 0, marginLeft: 10 }]} numberOfLines={1}>{bot.name}</Text>
+                </Pressable>
+                {leads ? (
+                  <Pressable accessibilityRole="button" onPress={() => update({ admin: null })} hitSlop={6}>
+                    <Text style={[typeScale.caption, styles.adminTag, { color: p.accent, backgroundColor: p.hover }]}>{t('Admin')}</Text>
+                  </Pressable>
+                ) : inRoom ? (
+                  <Pressable accessibilityRole="button" onPress={() => update({ admin: bot.id })} hitSlop={6}>
+                    <Text style={[typeScale.caption, { color: p.ink3, paddingHorizontal: 6, paddingVertical: 6 }]}>{t('Make admin')}</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: inRoom }} onPress={toggleMember} hitSlop={8}
+                  style={[styles.check, { marginLeft: 4, flexShrink: 0, borderColor: inRoom ? p.accent : p.line2, backgroundColor: inRoom ? p.accent : 'transparent' }]}>
                   {inRoom ? <CheckIcon size={14} color={p.accentInk} /> : null}
-                </View>
-              </Pressable>
+                </Pressable>
+              </View>
             )
           })}
         </Section>
         <Section label={t('Danger')}>
-          <DangerRow label={t('Delete group')} confirm={t('Delete {name}?', { name: room.name })} onConfirm={() => void run('delete-room', { id: room.id }, () => navigation.popTo('Chat'))} />
+          <DangerRow label={t('Delete group')} confirm={t('Delete {name}?', { name: room.name })} onConfirm={() => void run('delete-room', { id: room.id }, () => openChat(navigation))} />
         </Section>
       </ScrollView>
     </Screen>
@@ -665,18 +703,25 @@ export function NewGroup({ navigation }: any) {
           {bots.map(bot => {
             const on = picked.has(bot.id)
             const leads = on && lead === bot.id
+            const togglePick = () => setPicked(prev => { const next = new Set(prev); if (next.has(bot.id)) next.delete(bot.id); else next.add(bot.id); return next })
             return (
-              <Pressable key={bot.id} accessibilityRole="checkbox" accessibilityState={{ checked: on }}
-                onPress={() => setPicked(prev => { const next = new Set(prev); if (next.has(bot.id)) next.delete(bot.id); else next.add(bot.id); return next })}
-                style={({ pressed }) => [styles.row, pressed && { backgroundColor: p.hover }]}>
-                <Avatar bot={bot} dark={dark} size={32} ring={p.card} />
-                <Text style={[typeScale.settingsRow, { color: p.ink, flex: 1, marginLeft: 10 }]} numberOfLines={1}>{bot.name}</Text>
-                {leads ? <Text style={[typeScale.caption, styles.adminTag, { color: p.accent, backgroundColor: p.hover }]}>{t('Admin')}</Text>
-                  : on && picked.size > 1 ? <Text accessibilityRole="button" onPress={() => setAdmin(bot.id)} suppressHighlighting style={[typeScale.caption, { color: p.ink3, paddingHorizontal: 6, paddingVertical: 10 }]}>{t('Make admin')}</Text> : null}
-                <View style={[styles.check, { marginLeft: 8, borderColor: on ? p.accent : p.line2, backgroundColor: on ? p.accent : 'transparent' }]}>
+              <View key={bot.id} style={styles.row}>
+                <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: on }} onPress={togglePick}
+                  style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center' }}>
+                  <Avatar bot={bot} dark={dark} size={32} ring={p.card} />
+                  <Text style={[typeScale.settingsRow, { color: p.ink, flex: 1, minWidth: 0, marginLeft: 10 }]} numberOfLines={1}>{bot.name}</Text>
+                </Pressable>
+                {leads ? <Text style={[typeScale.caption, styles.adminTag, { color: p.accent, backgroundColor: p.hover, flexShrink: 0 }]}>{t('Admin')}</Text>
+                  : on && picked.size > 1 ? (
+                    <Pressable accessibilityRole="button" onPress={() => setAdmin(bot.id)} hitSlop={6}>
+                      <Text style={[typeScale.caption, { color: p.ink3, paddingHorizontal: 6, paddingVertical: 6 }]}>{t('Make admin')}</Text>
+                    </Pressable>
+                  ) : null}
+                <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: on }} onPress={togglePick} hitSlop={8}
+                  style={[styles.check, { marginLeft: 4, flexShrink: 0, borderColor: on ? p.accent : p.line2, backgroundColor: on ? p.accent : 'transparent' }]}>
                   {on ? <CheckIcon size={14} color={p.accentInk} /> : null}
-                </View>
-              </Pressable>
+                </Pressable>
+              </View>
             )
           })}
         </Section>
@@ -693,14 +738,17 @@ export function Memory({ route, navigation }: any) {
   const { call } = useTeam()
   const id = String(route.params?.id ?? '')
   const name = String(route.params?.name ?? '')
-  const [view, setView] = useState<{ summary?: string; entries?: { scope: string; topic: string | null; text: string; added?: string; by?: string | null }[]; error?: string } | null>(null)
+  const isGroup = route.params?.group === true
+  const [view, setView] = useState<{ summary?: { text?: string; at?: number } | string | null; entries?: { scope: string; topic: string | null; text: string; added?: string | null; by?: string | null; source?: string | null }[]; error?: string | null } | null>(null)
   const [asking, setAsking] = useState(false)
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState<string | null>(null)
   const [editor, setEditor] = useState<{ index: number | null; scope: string; topic: string; text: string } | null>(null)
-  const owner = route.params?.group === true ? { roomId: id } : { botId: id }
-  const load = () => void call('memory-view', owner).then(v => setView(v as typeof view)).catch(() => {})
-  useState(() => { load(); return null })
+  const owner = isGroup ? { roomId: id } : { botId: id }
+  const load = useCallback(() => {
+    void call('memory-view', isGroup ? { roomId: id } : { botId: id }).then(v => setView(v as typeof view)).catch(() => {})
+  }, [call, id, isGroup])
+  useEffect(() => { load() }, [load])
   const forget = (entry: { scope: string; topic: string | null; text: string }) =>
     confirmDanger(t('Remove from memory'), t('Remove'), () => void call('memory-forget', { ...owner, scope: entry.scope, topic: entry.topic, text: entry.text }).then(load).catch(() => {}), entry.text)
   const saveEditor = () => {
@@ -712,12 +760,13 @@ export function Memory({ route, navigation }: any) {
     setEditor(null)
     void call(endpoint, payload).then(load).catch(() => {})
   }
-  const ask = () => { if (!question.trim()) return; setAsking(true); void call('memory-ask', { ...owner, text: question.trim() }).then(v => { const r = v as { reply?: string; view?: typeof view }; setAnswer(r.reply ?? null); if (r.view !== undefined) setView(r.view) }).catch(() => {}).finally(() => setAsking(false)) }
+  const ask = () => { if (!question.trim()) return; setAsking(true); void call('memory-ask', { ...owner, text: question.trim() }).then(v => { const r = v as { reply?: string; view?: typeof view }; setAnswer(typeof r.reply === 'string' ? r.reply : null); if (r.view !== undefined) setView(r.view) }).catch(() => {}).finally(() => setAsking(false)) }
+  const summary = memorySummaryText(view?.summary)
   return (
     <Screen title={name}>
       <BackRow title={t('Memory')} onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-        {view?.summary ? <Text style={[typeScale.caption, { color: p.ink3, margin: 18 }]}>{view.summary}</Text> : null}
+        {summary !== null ? <Text style={[typeScale.caption, { color: p.ink3, margin: 18 }]}>{summary}</Text> : null}
         <View style={[styles.card, { backgroundColor: p.card, borderColor: p.line, marginTop: 14 }]}>
           <View style={styles.row}>
             <TextInput style={[typeScale.settingsRow, { color: p.ink, flex: 1 }]} value={question} onChangeText={setQuestion}
@@ -727,33 +776,41 @@ export function Memory({ route, navigation }: any) {
           {answer !== null ? <Text style={[typeScale.settingsRow, { color: p.ink, paddingHorizontal: 16, paddingBottom: 12 }]}>{answer}</Text> : null}
         </View>
         <Section label={t('{count} entries', { count: view?.entries?.length ?? 0 })}>
-          {(view?.entries ?? []).map((entry, i) => (
-            <Pressable key={i} accessibilityRole="button" onPress={() => setEditor({ index: i, scope: entry.scope, topic: entry.topic ?? '', text: entry.text })} style={styles.row}>
-              <View style={{ flex: 1 }}>
-                {entry.topic ? <Text style={[typeScale.small, { color: p.ink3 }]}>{entry.topic}</Text> : null}
-                <Text style={[typeScale.settingsRow, { color: p.ink }]}>{entry.text}</Text>
-                <Text style={[typeScale.small, { color: p.ink3, marginTop: 2 }]}>{[entry.added, entry.by ? t('by {name}', { name: entry.by }) : null].filter(Boolean).join(' · ')}</Text>
-              </View>
-              <Pressable accessibilityRole="button" accessibilityLabel={t('Remove from memory')} onPress={() => forget(entry)} hitSlop={8}
-                style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={{ color: p.ink3, fontSize: 17 }}>×</Text>
+          {(view?.entries ?? []).map((entry, i) => {
+            const by = entry.source === 'memory panel' ? t('by you') : entry.by ? t('by {name}', { name: entry.by }) : null
+            const meta = [entry.added, by].filter(Boolean).join(' · ')
+            return (
+              <Pressable key={i} accessibilityRole="button" onPress={() => setEditor({ index: i, scope: entry.scope, topic: entry.topic ?? '', text: entry.text })} style={styles.row}>
+                <View style={{ flex: 1 }}>
+                  {entry.topic ? <Text style={[typeScale.small, { color: p.ink3 }]}>{entry.topic}</Text> : null}
+                  <Text style={[typeScale.settingsRow, { color: p.ink }]}>{entry.text}</Text>
+                  {meta !== '' ? <Text style={[typeScale.small, { color: p.ink3, marginTop: 2 }]}>{meta}</Text> : null}
+                </View>
+                <Pressable accessibilityRole="button" accessibilityLabel={t('Remove from memory')} onPress={() => forget(entry)} hitSlop={8}
+                  style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: p.ink3, fontSize: 17 }}>×</Text>
+                </Pressable>
               </Pressable>
-            </Pressable>
-          ))}
+            )
+          })}
           {view !== null && (view.entries ?? []).length === 0 ? <Row label={t('Nothing saved yet')} disabled /> : null}
           <Row label={t('Add')} onPress={() => setEditor({ index: null, scope: 'own', topic: '', text: '' })} />
         </Section>
       </ScrollView>
       <Modal visible={editor !== null} transparent animationType="fade" onRequestClose={() => setEditor(null)}>
-        <Pressable style={styles.scrim} onPress={() => setEditor(null)} />
-        <View style={[styles.sheet, { backgroundColor: p.card, borderColor: p.line }]}>
-          <View style={styles.row}><TextInput style={[typeScale.settingsRow, { color: p.ink, flex: 1 }]} value={editor?.topic ?? ''} onChangeText={topic => setEditor(prev => prev === null ? null : { ...prev, topic })} placeholder={t('Topic')} placeholderTextColor={p.ink3} /></View>
-          <View style={styles.row}><TextInput style={[typeScale.settingsRow, { color: p.ink, flex: 1, minHeight: 80, textAlignVertical: 'top' }]} value={editor?.text ?? ''} onChangeText={text => setEditor(prev => prev === null ? null : { ...prev, text })} placeholder={t('Text')} placeholderTextColor={p.ink3} multiline autoFocus /></View>
-          <View style={styles.row}>
-            <Pressable accessibilityRole="button" onPress={() => setEditor(null)} style={{ flex: 1, alignItems: 'center' }}><Text style={[typeScale.settingsRow, { color: p.ink2 }]}>{t('Cancel')}</Text></Pressable>
-            <Pressable accessibilityRole="button" onPress={saveEditor} style={{ flex: 1, alignItems: 'center' }}><Text style={[typeScale.settingsRow, { color: p.accent, fontWeight: '600' }]}>{t('Save')}</Text></Pressable>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalWrap}>
+          <Pressable style={styles.scrim} onPress={() => setEditor(null)} />
+          <View style={[styles.sheet, { backgroundColor: p.card, borderColor: p.line }]}>
+            <View style={styles.row}><TextInput style={[typeScale.settingsRow, { color: p.ink, flex: 1 }]} value={editor?.topic ?? ''} onChangeText={topic => setEditor(prev => prev === null ? null : { ...prev, topic })} placeholder={t('Topic')} placeholderTextColor={p.ink3} /></View>
+            <View style={[styles.divider, { backgroundColor: p.line }]} />
+            <View style={styles.row}><TextInput style={[typeScale.settingsRow, { color: p.ink, flex: 1, minHeight: 80, maxHeight: 180, textAlignVertical: 'top' }]} value={editor?.text ?? ''} onChangeText={text => setEditor(prev => prev === null ? null : { ...prev, text })} placeholder={t('Text')} placeholderTextColor={p.ink3} multiline autoFocus /></View>
+            <View style={[styles.divider, { backgroundColor: p.line }]} />
+            <View style={styles.row}>
+              <Pressable accessibilityRole="button" onPress={() => setEditor(null)} style={{ flex: 1, minHeight: 36, alignItems: 'center', justifyContent: 'center' }}><Text style={[typeScale.settingsRow, { color: p.ink2 }]}>{t('Cancel')}</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={saveEditor} style={{ flex: 1, minHeight: 36, alignItems: 'center', justifyContent: 'center' }}><Text style={[typeScale.settingsRow, { color: p.accent, fontWeight: '600' }]}>{t('Save')}</Text></Pressable>
+            </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </Screen>
   )
@@ -764,7 +821,6 @@ export function Memory({ route, navigation }: any) {
 const KINDS: [string, string][] = [['at', 'Once'], ['daily', 'Every day'], ['weekly', 'Every week'], ['every', 'Repeat']]
 const UNITS: [string, number, string][] = [['minutes', 1, 'minutes'], ['hours', 60, 'hours'], ['days', 1440, 'days']]
 
-const DAY_NAMES = ['', '一', '二', '三', '四', '五', '六', '日']
 const todayString = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 
 const whenText = (task: { kind: string; time?: string; everySeconds?: number; minutes?: number; weekdays?: number[]; expression?: string; scheduledAt?: number }) => {
@@ -772,7 +828,17 @@ const whenText = (task: { kind: string; time?: string; everySeconds?: number; mi
     case 'at': return t('Once, {time}', { time: timeLabel(task.scheduledAt ?? 0) })
     case 'every': { const s = task.everySeconds ?? (task.minutes ?? 0) * 60; if (s % 86400 === 0) return s === 86400 ? t('Every day') : t('Every {count} days', { count: s / 86400 }); if (s % 3600 === 0) return s === 3600 ? t('Every hour') : t('Every {count} hours', { count: s / 3600 }); return t('Every {count} minutes', { count: Math.round(s / 60) }) }
     case 'daily': return t('Every day at {time}', { time: task.time ?? '' })
-    case 'weekly': { const d = (task.weekdays ?? []).join(); return d === '1,2,3,4,5' ? t('Every weekday at {time}', { time: task.time ?? '' }) : d === '6,7' ? t('Every weekend at {time}', { time: task.time ?? '' }) : d === '1,2,3,4,5,6,7' ? t('Every day at {time}', { time: task.time ?? '' }) : t('Every {days} at {time}', { days: (task.weekdays ?? []).map(day => t('周{d}', { d: DAY_NAMES[day] ?? String(day) })).join('、'), time: task.time ?? '' }) }
+    case 'weekly': {
+      const d = (task.weekdays ?? []).join()
+      if (d === '1,2,3,4,5') return t('Every weekday at {time}', { time: task.time ?? '' })
+      if (d === '6,7') return t('Every weekend at {time}', { time: task.time ?? '' })
+      if (d === '1,2,3,4,5,6,7') return t('Every day at {time}', { time: task.time ?? '' })
+      const labels = (task.weekdays ?? []).map(day => {
+        const short = weekdayShort(day)
+        return /^[\u4e00-\u9fff]$/.test(short) ? `周${short}` : short
+      })
+      return t('Every {days} at {time}', { days: labels.join(labels[0]?.startsWith('周') ? '、' : ', '), time: task.time ?? '' })
+    }
     case 'cron': return t('On the schedule {expression}', { expression: task.expression ?? '' })
     default: return ''
   }
@@ -795,8 +861,16 @@ export function Schedules({ route, navigation }: any) {
   const [count, setCount] = useState('1')
   const [unit, setUnit] = useState('hours')
   const [adding, setAdding] = useState(false)
-  const load = () => void call('schedules').then(v => setTasks(((v as { tasks?: typeof tasks })?.tasks ?? []).filter(t2 => t2.botId === undefined || t2.botId === botId))).catch(() => {})
-  useState(() => { load(); return null })
+  const [canPause, setCanPause] = useState(false)
+  const load = () => void call('schedules').then((v) => {
+    const view = v as { tasks?: typeof tasks, canPause?: boolean }
+    setCanPause(view?.canPause === true)
+    setTasks((view?.tasks ?? []).filter(t2 => t2.botId === undefined || t2.botId === botId))
+  }).catch(() => {})
+  // As on the desktop: a one-time task whose time has passed is neither paused nor resumed.
+  const pausable = (task: typeof tasks[number]) => canPause && (task.status === 'active' || task.status === 'paused')
+    && !((task.kind === 'at' || task.kind === 'after') && Date.parse(String(task.scheduledAt)) <= Date.now())
+  useEffect(() => { load() }, [botId])
   const when = () => {
     if (kind === 'at') { const at = new Date(`${atDate}T${atTime}`); return Number.isNaN(at.getTime()) ? null : { kind, at: at.toISOString() } }
     if (kind === 'every') { const minutes = Math.round(Number(count) * (UNITS.find(([id]) => id === unit)?.[1] ?? 60)); return minutes > 0 ? { kind, minutes } : null }
@@ -818,8 +892,13 @@ export function Schedules({ route, navigation }: any) {
             <View key={task.id} style={styles.row}>
               <View style={{ flex: 1 }}>
                 <Text style={[typeScale.settingsRow, { color: p.ink }]}>{task.title}</Text>
-                <Text style={[typeScale.small, { color: p.ink3, marginTop: 2 }]}>{whenText(task)}</Text>
+                <Text style={[typeScale.small, { color: p.ink3, marginTop: 2 }]}>{task.status === 'paused' ? `${whenText(task)} · ${t('Paused')}` : whenText(task)}</Text>
               </View>
+              {pausable(task) ? (
+                <Pressable accessibilityRole="button" accessibilityLabel={task.status === 'active' ? t('Pause task') : t('Resume task')} onPress={() => void run('schedule-pause', { sessionId: task.sessionId ?? sessionId, id: task.id, active: task.status !== 'active' }).then(load)} hitSlop={8} style={{ marginRight: 14 }}>
+                  <Text style={{ color: p.ink3, fontSize: 15 }}>{task.status === 'active' ? '‖' : '▶\uFE0E'}</Text>
+                </Pressable>
+              ) : null}
               <Pressable accessibilityRole="button" accessibilityLabel={t('Delete task')} onPress={() => void run('schedule-delete', { sessionId: task.sessionId ?? sessionId, id: task.id }, load)} hitSlop={8}>
                 <Text style={{ color: p.ink3, fontSize: 17 }}>×</Text>
               </Pressable>
@@ -845,22 +924,22 @@ export function Schedules({ route, navigation }: any) {
               {[1, 2, 3, 4, 5, 6, 7].map(day => (
                 <Pressable key={day} accessibilityRole="button" accessibilityState={{ selected: weekdays.includes(day) }} onPress={() => setWeekdays(days => days.includes(day) ? days.filter(d => d !== day) : [...days, day].sort())}
                   style={[styles.dayBtn, { borderColor: weekdays.includes(day) ? p.accent : p.line, backgroundColor: weekdays.includes(day) ? p.accent : 'transparent' }]}>
-                  <Text style={[typeScale.caption, { color: weekdays.includes(day) ? p.accentInk : p.ink2 }]}>{DAY_NAMES[day]}</Text>
+                  <Text style={[typeScale.caption, { color: weekdays.includes(day) ? p.accentInk : p.ink2 }]}>{weekdayShort(day)}</Text>
                 </Pressable>
               ))}
             </View>
           ) : null}
           {kind === 'daily' || kind === 'weekly' ? (
-            <View style={styles.row}><Text style={[typeScale.settingsRow, { color: p.ink3 }]}>{t('Time')}</Text>
-              <TextInput style={[typeScale.settingsRow, { color: p.ink, minWidth: 70 }]} value={time} onChangeText={setTime} placeholder="09:00" placeholderTextColor={p.ink3} autoCapitalize="none" /></View>
+            <View style={styles.row}><Text style={[typeScale.settingsRow, { color: p.ink3, flex: 1 }]}>{t('Time')}</Text>
+              <TextInput style={[typeScale.settingsRow, { color: p.ink, minWidth: 70, textAlign: 'right' }]} value={time} onChangeText={setTime} placeholder="09:00" placeholderTextColor={p.ink3} autoCapitalize="none" /></View>
           ) : null}
           {kind === 'every' ? (
-            <View style={styles.row}>
-              <Text style={[typeScale.settingsRow, { color: p.ink3 }]}>{t('Every')}</Text>
-              <TextInput style={[typeScale.settingsRow, { color: p.ink, width: 56, textAlign: 'center' }]} value={count} onChangeText={setCount} placeholder="1" placeholderTextColor={p.ink3} keyboardType="number-pad" />
-              <View style={{ flex: 1 }}>
-                <Segmented value={unit} onPick={setUnit} options={UNITS.map(([id, , label]) => ({ id, label: t(label) }))} />
+            <View style={{ paddingHorizontal: 16, paddingVertical: 10, gap: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={[typeScale.settingsRow, { color: p.ink3 }]}>{t('Every')}</Text>
+                <TextInput style={[typeScale.settingsRow, { color: p.ink, minWidth: 72, borderWidth: 1, borderColor: p.line, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, textAlign: 'center' }]} value={count} onChangeText={setCount} placeholder="1" placeholderTextColor={p.ink3} keyboardType="number-pad" />
               </View>
+              <Segmented value={unit} onPick={setUnit} options={UNITS.map(([id, , label]) => ({ id, label: t(label) }))} />
             </View>
           ) : null}
         </Section>
@@ -880,35 +959,84 @@ export function Schedules({ route, navigation }: any) {
 export function Folder({ route, navigation }: any) {
   const { p } = useTheme()
   const { call } = useTeam()
-  const { run } = useWrite(navigation)
+  const { once, error, busy } = useWrite(navigation)
   const [path, setPath] = useState(String(route.params?.current ?? ''))
-  const [listing, setListing] = useState<{ path: string; parent: string | null; entries: { name: string; path: string }[]; truncated?: boolean } | null>(null)
+  const [listing, setListing] = useState<{ path: string; crumbs?: { path: string }[]; entries: { name: string; path: string }[]; truncated?: boolean } | null>(null)
   const [recent, setRecent] = useState<{ path: string; title: string }[]>([])
-  const load = (next: string) => { setPath(next); void call('folder-list', { path: next }).then(v => setListing(v as typeof listing)).catch(() => {}) }
-  useState(() => { void call('folders').then(v => setRecent((v as { folders?: { path: string; title: string }[] })?.folders ?? [])).catch(() => {}); load(path); return null })
+  // Whether the computer lists folders; unknown until `folders` answers. A computer whose
+  // folders are chosen in its own window (or that has no chooser) lists nothing, so there
+  // a path is typed or taken from the folders already known.
+  const [browsable, setBrowsable] = useState<boolean | null>(null)
+  const request = useRef(0)
+  const [listingError, setListingError] = useState<string | null>(null)
+  const load = (next: string) => {
+    const id = ++request.current
+    setPath(next)
+    setListing(null)
+    setListingError(null)
+    void call('folder-list', { path: next }).then(v => {
+      if (id !== request.current) return
+      const nextListing = v as NonNullable<typeof listing>
+      setListing(nextListing)
+      setPath(nextListing.path)
+    }).catch(failure => {
+      if (id === request.current) setListingError((failure as Error)?.message ?? String(failure))
+    })
+  }
+  useEffect(() => {
+    void call('folders').then(v => {
+      const info = v as { picker?: string | null; folders?: { path: string; title: string }[] } | null
+      setRecent(info?.folders ?? [])
+      // A host that does not say is asked to list, as before.
+      const browse = info?.picker === undefined || info?.picker === 'browse'
+      setBrowsable(browse)
+      if (browse) load(path)
+    }).catch(() => { setBrowsable(true); load(path) })
+  }, [])
   const choose = (picked: string) => {
     const target = route.params?.onPick === 'room' ? ['update-room', { id: route.params?.roomId, workDir: picked }]
       : route.params?.onPick === 'team' ? ['team-workspace', { path: picked }]
       : ['update-bot', { id: route.params?.botId, workDir: picked }]
-    void run(target[0] as string, target[1] as Record<string, unknown>, () => navigation.goBack())
+    void once(target[0] as string, target[1] as Record<string, unknown>, () => navigation.goBack())
   }
+  const parent = listing?.crumbs && listing.crumbs.length > 1 ? listing.crumbs.at(-2) : undefined
+  const typed = path.trim()
   return (
     <Screen title="">
       <BackRow title={t('Working folder')} onBack={() => navigation.goBack()} />
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-        {recent.length > 0 ? (
-          <Section label={t('Folders')}>
-            {recent.map(folder => <Row key={folder.path} label={folder.title} value={folder.path} onPress={() => load(folder.path)} />)}
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+        {error ? <Text style={[typeScale.small, { color: p.danger, marginHorizontal: 18, marginTop: 10 }]}>{error}</Text> : null}
+        {listingError ? <View style={{ marginHorizontal: 18, marginTop: 10 }}>
+          <Text style={[typeScale.small, { color: p.danger }]}>{listingError}</Text>
+          {recent.length > 0 ? <Text style={[typeScale.small, { color: p.ink }]}>{t('Pick a folder from Folders.')}</Text> : null}
+        </View> : null}
+        {route.params?.onPick === 'room' ? (
+          <Section label={t('Folder')}>
+            <Row label={t("Each Bot's own folder")} disabled={busy} onPress={() => choose('')} />
           </Section>
         ) : null}
-        <Section label={path || '/'}>
-          {listing?.parent ? <Row label={t('Up one level')} onPress={() => load(listing.parent ?? '')} /> : null}
-          {(listing?.entries ?? []).map(entry => <Row key={entry.path} label={entry.name} onPress={() => load(entry.path)} />)}
-          {listing !== null && listing.entries.length === 0 ? <Row label={t('No folders inside.')} disabled /> : null}
-          {listing?.truncated ? <Row label={t('Some folders are not shown.')} disabled /> : null}
-        </Section>
+        {recent.length > 0 ? (
+          <Section label={t('Folders')}>
+            {recent.map(folder => <Row key={folder.path} label={folder.title} value={folder.path} onPress={() => browsable === false ? setPath(folder.path) : load(folder.path)} />)}
+          </Section>
+        ) : null}
+        {browsable === false ? (
+          <Section label={t('Folder path')}>
+            <View style={styles.row}>
+              <TextInput style={[typeScale.settingsRow, { color: p.ink, flex: 1 }]} value={path} onChangeText={setPath}
+                placeholder={t('Full path of a folder')} placeholderTextColor={p.ink3} autoCapitalize="none" autoCorrect={false} />
+            </View>
+          </Section>
+        ) : (
+          <Section label={path || '/'}>
+            {parent ? <Row label={t('Up one level')} onPress={() => load(parent.path)} /> : null}
+            {(listing?.entries ?? []).map(entry => <Row key={entry.path} label={entry.name} onPress={() => load(entry.path)} />)}
+            {listing !== null && listing.entries.length === 0 ? <Row label={t('No folders inside.')} disabled /> : null}
+            {listing?.truncated ? <Row label={t('Some folders are not shown.')} disabled /> : null}
+          </Section>
+        )}
         <View style={{ paddingHorizontal: 18, marginTop: 14 }}>
-          <Pressable accessibilityRole="button" onPress={() => choose(path)} style={({ pressed }) => [styles.cta, { backgroundColor: p.accent, opacity: pressed ? 0.85 : 1 }]}>
+          <Pressable accessibilityRole="button" disabled={typed === '' || busy} onPress={() => { if (typed !== '') choose(typed) }} style={({ pressed }) => [styles.cta, { backgroundColor: p.accent, opacity: typed === '' || busy ? 0.5 : pressed ? 0.85 : 1 }]}>
             <Text style={[typeScale.settingsRow, { color: p.accentInk, fontWeight: '600' }]}>{t('Use this folder')}</Text>
           </Pressable>
         </View>
@@ -927,11 +1055,10 @@ export function Usage({ route, navigation }: any) {
   const [summary, setSummary] = useState<{ day?: Totals; week?: Totals; month?: Totals; models?: ({ key?: string; name: string } & Totals)[] } | null>(null)
   // The Bot's chat Session projections (channel.js RUN_STATS).
   const [stats, setStats] = useState<{ sessionStats?: { turns?: number; steps?: number }; contextPressure?: { pressureTokens?: number; contextWindow?: number } } | null>(null)
-  useState(() => {
+  useEffect(() => {
     void call('usage-summary', { botId }).then(v => setSummary(v as typeof summary)).catch(() => {})
     void call('run-stats', { botId }).then(v => setStats(v as typeof stats)).catch(() => {})
-    return null
-  })
+  }, [botId])
   const sum = (t2: Totals) => t2.input + (t2.cacheRead ?? 0) + (t2.cacheWrite ?? 0) + t2.output
   const total = (t2?: Totals) => t2 === undefined ? '—' : sum(t2).toLocaleString()
   const pressure = stats?.contextPressure
@@ -970,13 +1097,12 @@ export function Computers({ navigation }: any) {
   const { online, computer } = useTeam()
   const [list, setList] = useState<StoredComputer[]>([])
   const [prints, setPrints] = useState<Record<string, string>>({})
-  useState(() => {
+  useEffect(() => {
     void listComputers().then(({ computers }) => {
       setList(computers)
       computers.forEach(item => void fingerprint(item.hostKey).then(text => setPrints(prev => ({ ...prev, [item.hostDeviceId]: text }))).catch(() => {}))
     })
-    return null
-  })
+  }, [])
   const actions = useContext(ComputersCtx)
   const forget = (id: string, name: string) => confirmDanger(t('Forget {name}?', { name }), t('Forget'), () => { void removeComputer(id).then(next => { setList(next); if (computer?.hostDeviceId === id) actions.reload() }) })
   return (
@@ -1058,27 +1184,29 @@ const styles = StyleSheet.create({
   tabs: { flexDirection: 'row', alignSelf: 'center', borderRadius: 10, padding: 2, marginTop: 14 },
   tab: { minWidth: 64, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   segments: { flexDirection: 'row', borderRadius: 10, padding: 2 },
-  segment: { flex: 1, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  segment: { flex: 1, minHeight: 36, paddingVertical: 6, borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   dropdown: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, borderRadius: radius.card, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 14 },
   backRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 8 },
   backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  card: { marginHorizontal: 14, borderRadius: radius.card, borderWidth: 1, overflow: 'hidden', ...shadow(1) },
-  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
+  card: { marginHorizontal: 14, borderRadius: radius.card, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden', ...shadow(1) },
+  divider: { height: StyleSheet.hairlineWidth, marginLeft: 16 },
+  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, minHeight: 50, gap: 10 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
   cell: { width: 52, height: 52, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   segRow: { flexDirection: 'row', borderRadius: 9, padding: 2 },
-  seg: { flex: 1, height: 32, borderRadius: 7, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  seg: { flex: 1, minHeight: 34, paddingVertical: 5, borderRadius: 7, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   switch: { width: 46, height: 28, borderRadius: 14, padding: 3, justifyContent: 'center' },
   knob: { width: 22, height: 22, borderRadius: 11 },
   check: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   adminTag: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },
-  pillBtn: { borderRadius: 20, paddingHorizontal: 18, height: 40, alignItems: 'center', justifyContent: 'center' },
-  cta: { height: 48, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  pillBtn: { borderRadius: 20, paddingHorizontal: 18, minHeight: 40, paddingVertical: 8, alignItems: 'center', justifyContent: 'center' },
+  cta: { minHeight: 48, borderRadius: radius.pill, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
+  modalWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
   scrim: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.4)' },
-  sheet: { position: 'absolute', left: 24, right: 24, top: '25%', maxHeight: '55%', borderRadius: radius.card, borderWidth: 1, overflow: 'hidden' },
+  sheet: { maxHeight: '72%', borderRadius: radius.card, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden', ...shadow(2) },
   menuRow: { paddingHorizontal: 18, paddingVertical: 14 },
   pickRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  dayBtn: { minWidth: 36, height: 36, borderRadius: 18, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  dayBtn: { minWidth: 36, height: 36, paddingHorizontal: 8, borderRadius: 18, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   tick: { position: 'absolute', top: 3, right: 3, width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
 })
 
@@ -1114,7 +1242,7 @@ export function BotBrowser({ bot, navigation }: { bot: Bot; navigation: { goBack
         {error ? <Text style={[typeScale.small, { color: p.danger, marginTop: 12 }]}>{error}</Text> : null}
         {hold?.note ? <Text style={[typeScale.small, { color: p.ink2, marginTop: 12 }]}>{hold.note}</Text> : null}
         {/* A host with Bot browsers off has nothing to take over or stop. */}
-        {(team as { browser?: unknown } | null)?.browser === false ? null : <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
+        {(team as { browser?: unknown } | null)?.browser === false ? null : <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 16 }}>
           {hold?.callId !== undefined ? (
             <>
               <Pressable accessibilityRole="button" onPress={() => act('browser-give-back', { botId: bot.id, outcome: 'done', callId: hold.callId })} style={[styles.pillBtn, { backgroundColor: p.accent }]}><Text style={{ color: p.accentInk, fontWeight: '600' }}>{t('Done')}</Text></Pressable>

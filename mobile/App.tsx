@@ -1,7 +1,8 @@
 import 'react-native-gesture-handler'
 import { StatusBar } from 'expo-status-bar'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Linking, Text, useColorScheme, View } from 'react-native'
+import { ActivityIndicator, Linking, Platform, Text, useColorScheme, View } from 'react-native'
+import { takePairingFragment } from './src/team/pair-fragment.ts'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { DefaultTheme, NavigationContainer, type NavigationState } from '@react-navigation/native'
 import { setLang } from './src/ui/i18n.ts'
@@ -9,10 +10,13 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { loadComputer, loadIdentity, onPrefsChange, readPrefs, setActiveComputer, type PhoneIdentity, type SavedComputer } from './src/store.ts'
 import { ComputersCtx, type ComputerActions } from './src/nav/computers.ts'
 import { errorText } from './src/team/link.ts'
+import { loadSeen } from './src/team/seen.ts'
 import { DEMO, DemoProvider, TeamProvider, useTeam } from './src/team/context.tsx'
+import { ErrorBoundary } from './src/ui/error-boundary.tsx'
 import { palette, ThemeContext, useTheme } from './src/ui/tokens.ts'
 import { Pair } from './src/screens/Pair.tsx'
 import ShellB from './src/nav/ShellB.tsx'
+import { BrowserSession } from './src/team/BrowserSession'
 
 // Colors follow the computer's prefs plus the phone's light/dark mode. The
 // local appearance pref overrides the system scheme.
@@ -20,8 +24,9 @@ function useDark(): boolean {
   const system = useColorScheme() === 'dark'
   const [override, setOverride] = useState<string | null>(null)
   useEffect(() => {
-    void readPrefs().then(prefs => setOverride(prefs.theme ?? 'system'))
-    return onPrefsChange(() => void readPrefs().then(prefs => setOverride(prefs.theme ?? 'system')))
+    const read = () => void readPrefs().then(prefs => setOverride(prefs.theme ?? 'system')).catch(() => setOverride('system'))
+    read()
+    return onPrefsChange(read)
   }, [])
   return override === 'dark' || (override !== 'light' && system)
 }
@@ -35,8 +40,9 @@ function useLang(): string | undefined {
       setLang(next)
       setLangState(next)
     }
-    void readPrefs().then(apply)
-    return onPrefsChange(() => void readPrefs().then(apply))
+    const read = () => void readPrefs().then(apply).catch(() => apply({}))
+    read()
+    return onPrefsChange(read)
   }, [])
   return lang
 }
@@ -72,7 +78,9 @@ function ThemedShell({ lang }: { lang?: string }) {
   return (
     <ThemeContext.Provider value={value}>
       <NavigationContainer key={lang} theme={navTheme} initialState={navState.current} onStateChange={state => { navState.current = state }}>
-        <ShellB />
+        <ErrorBoundary>
+          <ShellB />
+        </ErrorBoundary>
       </NavigationContainer>
     </ThemeContext.Provider>
   )
@@ -86,16 +94,18 @@ function Linked({ computer, identity, lang }: { computer: SavedComputer; identit
   )
 }
 
-function Boot() {
+function Boot({ lang }: { lang?: string }) {
   const { p } = useTheme()
   const [identity, setIdentity] = useState<PhoneIdentity | null>(null)
   const [computer, setComputer] = useState<SavedComputer | null | undefined>(undefined)
   const [bootError, setBootError] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [offer, setOffer] = useState<string | null>(null)
-  const lang = useLang()
+  const [seenReady, setSeenReady] = useState(false)
 
   useEffect(() => {
+    void loadSeen().finally(() => setSeenReady(true))
+    if (DEMO) return
     Promise.all([loadIdentity(), loadComputer()])
       .then(([nextIdentity, saved]) => { setIdentity(nextIdentity); setComputer(saved ?? null) })
       .catch(failure => setBootError(errorText(failure)))
@@ -104,6 +114,11 @@ function Boot() {
   // A pairing link opened from the system camera arrives on whatever screen is showing.
   useEffect(() => {
     const open = (url?: string | null) => { if (url?.startsWith('dsbot://pair')) { setOffer(url); setAdding(true) } }
+    if (Platform.OS === 'web') {
+      const uri = takePairingFragment(window.location, window.history)
+      if (uri !== undefined) { setOffer(uri); setAdding(true) }
+      return
+    }
     void Linking.getInitialURL().then(open)
     const subscription = Linking.addEventListener('url', event => open(event.url))
     return () => subscription.remove()
@@ -116,21 +131,27 @@ function Boot() {
   }), [])
   const paired = useCallback((next: SavedComputer) => { setAdding(false); setOffer(null); setComputer(next) }, [])
 
-  if (DEMO && lang !== undefined) {
+  if (DEMO && lang !== undefined && seenReady) {
     return <ComputersCtx.Provider value={actions}><DemoProvider><ThemedShell lang={lang} /></DemoProvider></ComputersCtx.Provider>
   }
   if (bootError !== null) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: p.main }}><Text style={{ color: p.danger }}>{bootError}</Text></View>
-  if (identity === null || computer === undefined || lang === undefined) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: p.main }}><ActivityIndicator color={p.accent} /></View>
+  if (identity === null || computer === undefined || lang === undefined || !seenReady) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: p.main }}><ActivityIndicator color={p.accent} /></View>
   if (computer === null || adding) return <ThemeProvider><Pair identity={identity} offer={offer} onPaired={paired} onCancel={computer !== null ? () => { setAdding(false); setOffer(null) } : undefined} /></ThemeProvider>
   return <ComputersCtx.Provider value={actions}><Linked computer={computer} identity={identity} lang={lang} /></ComputersCtx.Provider>
 }
 
 export default function App() {
   const dark = useDark()
+  const lang = useLang()
+  const rootTheme = useMemo(() => ({ dark, p: palette(dark) }), [dark])
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <Boot />
+        <ThemeContext.Provider value={rootTheme}>
+          <ErrorBoundary>
+            <BrowserSession><Boot lang={lang} /></BrowserSession>
+          </ErrorBoundary>
+        </ThemeContext.Provider>
         <StatusBar style={dark ? 'light' : 'dark'} />
       </SafeAreaProvider>
     </GestureHandlerRootView>

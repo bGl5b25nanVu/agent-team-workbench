@@ -1,10 +1,10 @@
-/* DS Bot start window. Geometry in DIP of the 720 x 540 window content (40 px band on top). */
+/* Gongzuo start window. Geometry in DIP of the 720 x 540 window content (40 px band on top). */
 /* tokens */
-/* Generated from the DeepSeek theme in ds-bot/src/client/themes.js, inks.js and styles.js by scripts/start-assets.mjs; do not edit. */
-:root{color-scheme:light dark;--bt-main:#fcfcfc;--bt-card:#ffffff;--bt-ink:#141414;--bt-ink-2:rgba(20,20,20,0.6);--bt-line:rgba(20,20,20,0.08);--bt-line-2:rgba(20,20,20,0.15);--bt-hover:rgba(119,119,119,.09);--bt-accent:#4d6bfe;--bt-accent-ink:#ffffff;--bt-ink-deepseek:#4D6BFE;--bt-green:#00c972;--bt-danger:#e02135}
-@media (prefers-color-scheme:dark){:root{--bt-main:#141414;--bt-card:#1f1f1f;--bt-ink:#f2f2f2;--bt-ink-2:rgba(242,242,242,0.6);--bt-line:rgba(242,242,242,0.08);--bt-line-2:rgba(242,242,242,0.15);--bt-hover:rgba(160,160,160,.12);--bt-accent:#5b7bff;--bt-accent-ink:#141414;--bt-ink-deepseek:#6A84FF}}
+/* Generated from the Gongzuo theme in ds-bot/src/client/themes.js and styles.js by scripts/start-assets.mjs; do not edit. */
+:root{color-scheme:light dark;--bt-main:#fbfcff;--bt-card:#ffffff;--bt-ink:#171d2b;--bt-ink-2:rgba(23,29,43,0.6);--bt-line:rgba(23,29,43,0.08);--bt-line-2:rgba(23,29,43,0.15);--bt-hover:rgba(119,119,119,.09);--bt-accent:#3157ed;--bt-accent-ink:#ffffff;--bt-ink-deepseek:#3157ed;--bt-green:#00c972;--bt-danger:#e02135}
+@media (prefers-color-scheme:dark){:root{--bt-main:#111722;--bt-card:#1a2333;--bt-ink:#edf1fa;--bt-ink-2:rgba(237,241,250,0.6);--bt-line:rgba(237,241,250,0.08);--bt-line-2:rgba(237,241,250,0.15);--bt-hover:rgba(160,160,160,.12);--bt-accent:#91a8ff;--bt-accent-ink:#141414;--bt-ink-deepseek:#91a8ff}}
 /* /tokens */
-:root{--font:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei UI",system-ui,sans-serif;--mono:ui-monospace,Consolas,monospace;--u:1.12px}
+:root{--font:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;--mono:ui-monospace,Consolas,monospace;--u:1.12px}
 /* springs */
 /* Generated from ds-bot/src/client/motion.js by scripts/start-assets.mjs; do not edit. */
 :root {
@@ -23,7 +23,7 @@
 
 /* The corners DSH gives every element (dsh-client-ui-theme corner-shape.css), so the buttons here
    are shaped like the plugin's; the circles stay round. */
-@supports (corner-shape:superellipse(1.5)){*,::before,::after{corner-shape:superellipse(1.5)}.whale-hit,.ripple,.drop{corner-shape:round}}
+@supports (corner-shape:superellipse(1.5)){*,::before,::after{corner-shape:superellipse(1.5)}.whale-hit{corner-shape:round}}
 [hidden]{display:none!important}
 html,body{margin:0;height:100%;background:transparent}
 /* The stage hangs 45 px below the window until a card needs the sheet; body clips it rather
@@ -36,6 +36,8 @@ p,h1,h2,ol,ul{margin:0;padding:0}
 code{font-family:var(--mono);font-size:inherit}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .band{position:fixed;inset:0 0 auto;height:40px;-webkit-app-region:drag;app-region:drag}
+.start-brand{display:flex;align-items:center;justify-content:center;gap:5px;height:40px;font-size:14px;font-weight:650;letter-spacing:.02em}
+.start-brand img{display:block;width:28px;height:28px;object-fit:contain}
 html[data-frame=system] .band{display:none}
 
 /* stage: everything that moves when a card needs the sheet */
@@ -53,34 +55,17 @@ html:not([data-up]) .stage{translate:0 45px}
 .voice[data-on]{opacity:1;transition:opacity .16s ease-out}
 html[data-up] .voice{translate:0 -108px}
 
-/* The pond: the ring, the water, the lane, the whale's hit box and the effects, as one block.
-   The whale floats in the middle of a ring of three arcs, one per stage: centre (360, 210),
-   radius 106; the waterline is its chord at y 242; the whale is 112 px. When a card needs the
-   sheet, the pond shrinks to .62 and rises with the stage (start.js shift()), so the ring ends
-   above the card. */
+/* The original coordinator illustration is centred in the progress ring. The legacy
+   wrapper names are shared with the startup director and window hand-off. */
 .pond{position:absolute;inset:0;pointer-events:none;transform-origin:360px 210px}
 html[data-up] .pond{translate:0 -60px;scale:.62}
-.lane{position:absolute;left:48px;top:102px;width:624px;height:140px;overflow:clip;pointer-events:none}
-.whale-x{position:absolute;left:256px;top:43px;width:112px;height:112px}
-/* The whale's flight to the Main Bot at the hand-off (whale.js leap): window-wide and above the
-   stage, so neither the lane's clip at the waterline nor the stage holds it. */
+.lane{position:absolute;left:48px;top:102px;width:624px;height:216px;overflow:visible;pointer-events:none}
+.whale-x{position:absolute;left:228px;top:24px;width:168px;height:168px}
 .flight{position:fixed;inset:0;overflow:visible;pointer-events:none}
-.whale-gaze,.whale,.whale-move,.whale-loop{width:100%;height:100%}
-/* .whale-gaze scales only for the breath at rest (whale.js), around the same pivot. */
-.whale-gaze,.whale,.whale-move,.whale-loop{transform-origin:49.95% 79%}
-.whale-gaze{translate:calc(var(--gx,0) * 4.6 * var(--u)) calc(var(--gy,0) * 2.3 * var(--u));transition:translate .18s ease-out}
-.whale-svg{display:block;width:100%;height:100%;overflow:visible;forced-color-adjust:none}
-#tail{transform-box:view-box;transform-origin:27.9px 61.1px}
-.bt-eye,#eye-pair,#gaze{transform-box:fill-box;transform-origin:center}
-#gaze{transform:translate(calc(var(--gx,0) * 12%),calc(var(--gy,0) * 11%));transition:transform .18s ease-out}
-.whale-hit{position:absolute;left:290px;top:140px;width:140px;height:108px;border-radius:50%;pointer-events:auto}
-.fx{position:absolute;inset:0;pointer-events:none}
-.ripple{position:absolute;left:326px;top:236px;width:68px;height:12px;box-sizing:border-box;border:1.5px solid var(--bt-line-2);border-radius:50%;opacity:0}
-/* The spout: the plume is a template that whale.js clones for each spout, with its drops. */
-.spout{position:absolute;left:61%;top:21%;width:0;height:0;pointer-events:none}
-.plume{position:absolute;left:-24px;top:-44px;width:48px;height:48px;overflow:visible;transform-origin:50% 100%}
-.plume path{fill:none;stroke:color-mix(in srgb,var(--bt-ink-deepseek) 70%,transparent);stroke-width:4;stroke-linecap:round;stroke-dasharray:1 1;stroke-dashoffset:1}
-.drop{position:absolute;left:-2.75px;top:-2.75px;width:5.5px;height:5.5px;border-radius:50%;background:color-mix(in srgb,var(--bt-ink-deepseek) 70%,transparent);pointer-events:none}
+.whale-gaze,.whale,.whale-move,.whale-loop{width:100%;height:100%;transform-origin:50% 80%}
+.whale-gaze{translate:calc(var(--gx,0) * 2.3 * var(--u)) calc(var(--gy,0) * 1.2 * var(--u));transition:translate .18s ease-out}
+.coordinator-image{display:block;width:100%;height:100%;object-fit:contain;forced-color-adjust:none;-webkit-user-drag:none}
+.whale-hit{position:absolute;left:282px;top:128px;width:156px;height:170px;border-radius:50%;pointer-events:auto}
 
 /* The ring is the progress: one arc per stage, 120 degrees each from the top, clockwise, 10
    degrees apart. Pending: a faint line. Active (whale.js, after 250 ms pending): tinted, with a
@@ -115,7 +100,6 @@ html[data-ring=closed] .ring-full{stroke-dashoffset:0;opacity:1}
 html[data-ring=closed] .ring{animation:bt-ring-pulse .5s cubic-bezier(.3,.7,.4,1)}
 @keyframes bt-ring-pulse{0%,100%{scale:1}40%{scale:1.035}}
 html[data-resume] :is(.arc-fill,.ring-full){transition:none}
-.water{position:absolute;left:260px;top:242px;width:200px;height:1px;background:linear-gradient(90deg,transparent,var(--bt-line-2) 18% 82%,transparent)}
 /* Stage props: in front of the whale, on the waterline, the work of the stage that is running:
    a folder whose pages riffle (data), two gears turning on a pulse (engine), the team popping up
    (team). Each shows only while its arc is active, so a stage done before it turns active shows
@@ -171,7 +155,7 @@ html[data-shimmer] .voice[data-on]>span{color:transparent;background:linear-grad
 .caption{position:absolute;left:48px;top:358px;width:624px;height:28px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;line-height:18px;color:var(--bt-ink-2);transition:opacity .16s}
 html[data-up] .caption{opacity:0;pointer-events:none}
 .caption-text{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.caption>*{opacity:0;filter:blur(6px);transition:opacity .16s,filter .16s}
+.caption>*{opacity:0;filter:var(--bt-fx-blur-6,blur(6px));transition:opacity .16s,filter .16s}
 .caption>[data-on]{opacity:1;filter:none;transition:opacity .22s ease-out,filter .22s ease-out}
 
 /* sheet: one surface that every card morphs in and out of */
@@ -187,7 +171,7 @@ html[data-sheet=none] .sheet{pointer-events:none}
 .ink{color:var(--bt-ink)}
 .danger{color:var(--bt-danger)}
 .card{position:absolute;inset:0 0 auto;max-height:100%;box-sizing:border-box;padding:14px 16px;display:flex;flex-direction:column;transition:opacity .22s ease-out .07s,filter .22s ease-out .07s}
-@starting-style{.card{opacity:0;filter:blur(6px)}}
+@starting-style{.card{opacity:0;filter:var(--bt-fx-blur-6,blur(6px))}}
 .card-scroll,.log{scrollbar-width:thin;scrollbar-color:var(--bt-line-2) transparent}
 /* The padding keeps the 2px + 2px focus rings inside the scroll clip; the negative margin keeps the layout where it was. */
 .card-scroll{position:relative;min-height:0;flex:0 1 auto;overflow:auto;padding:4px;margin:-4px}
@@ -201,7 +185,7 @@ html[data-sheet=none] .sheet{pointer-events:none}
 .card>.foot,.miss{margin-top:8px}
 .miss{font-size:13px;line-height:18px;color:var(--bt-danger)}
 :is(.miss,.banner,.log,.confirm,.models,.more,[data-u]):not([hidden]){transition:opacity .22s ease-out,filter .22s ease-out}
-@starting-style{:is(.miss,.banner,.log,.confirm,.models,.more,[data-u]):not([hidden]){opacity:0;filter:blur(6px)}}
+@starting-style{:is(.miss,.banner,.log,.confirm,.models,.more,[data-u]):not([hidden]){opacity:0;filter:var(--bt-fx-blur-6,blur(6px))}}
 /* Opened, the import card's body fits the sheet at 540 px with these gaps; a model list
    opened under it scrolls inside the card. */
 .more{margin-top:4px;padding-top:5px;border-top:1px solid var(--bt-line)}
@@ -261,63 +245,50 @@ html[data-start=moving] .footrow{display:none}
 /* entrance, keyed on data-start (no JS timing); the ring draws itself in as the whale surfaces */
 /* held at its first frame until the window is on screen (start.js data-held) */
 html[data-held] *{animation-play-state:paused!important}
-@keyframes bt-veil{from{opacity:0;filter:blur(6px)}}
+@keyframes bt-veil{from{opacity:0;filter:var(--bt-fx-blur-6,blur(6px))}}
 @keyframes bt-enter-first{from{transform:translateY(96px) rotate(-12deg)}}
 @keyframes bt-enter-later{from{transform:translateY(84px)}}
 @keyframes bt-ring-draw{from{stroke-dashoffset:101}}
-@keyframes bt-wake{0%{transform:scaleY(.05)}60%{transform:scaleY(1.06)}}
-@keyframes bt-flick-in{0%,100%{transform:none}35%{transform:rotate(-10deg)}70%{transform:rotate(8deg)}}
-@keyframes bt-ripple-scale{from{scale:.5}to{scale:1.6}}
-@keyframes bt-ripple-fade{from{opacity:.9}to{opacity:0}}
 html[data-start=first]:not([data-resume],[data-entered]) .whale-move{animation:bt-enter-first var(--spring-stretch-ms) var(--spring-stretch) backwards}
-html[data-start=first]:not([data-resume],[data-entered]) .bt-eye{animation:bt-wake .16s ease-out .36s backwards}
-html[data-start=first]:not([data-resume],[data-entered],[data-tier=quiet]) #tail{animation:bt-flick-in .4s ease-in-out .3s}
-html[data-start=first]:not([data-resume],[data-settled],[data-tier=quiet]) .ripple{animation:bt-ripple-scale var(--spring-shape-ms) var(--spring-shape) .12s backwards,bt-ripple-fade .56s linear .12s}
 html[data-start=first]:not([data-resume],[data-settled]) .voice{animation:bt-veil .22s ease-out .16s backwards}
-html:not([data-resume],[data-settled]) .water{animation:bt-veil .22s ease-out .22s backwards}
 html:not([data-resume],[data-settled]) .arc-base{animation:bt-ring-draw .5s cubic-bezier(.3,.7,.4,1) .18s backwards}
 html[data-start=first]:not([data-resume],[data-settled]) .place{animation:bt-veil .22s ease-out .42s backwards}
 html:is([data-start=later],[data-start=moving]):not([data-resume],[data-entered]) .whale-move{animation:bt-enter-later var(--spring-tap-ms) var(--spring-tap) backwards}
 html:is([data-start=later],[data-start=moving]):not([data-resume],[data-settled]) .voice{animation:bt-veil .22s ease-out .06s backwards}
 
-/* state loops, keyed on data-whale and data-tail; plugin keyframes (styles.js:84-105) in px via --u */
-html[data-whale=searching] .whale-loop{animation:bt-seek 1s ease-in-out infinite}
-html[data-whale=searching] #eye-pair{animation:bt-scan 1.6s ease-in-out infinite}
-html[data-whale=working] .whale-loop{animation:bt-bob 1.6s ease-in-out infinite}
-html[data-whale=working] .bt-eye{animation:bt-blink 2.4s ease-in-out infinite}
-html[data-whale=pondering] .whale-loop{animation:bt-ponder 2.2s ease-in-out infinite}
-html[data-whale=pondering] .bt-eye{animation:bt-squint 2.2s ease-in-out infinite}
-html[data-whale=sending] .whale-loop{animation:bt-dash 1.1s cubic-bezier(.4,0,.2,1) infinite}
-html[data-tail=beat]:not([data-tier=quiet]) #tail{animation:bt-tail-beat 1.1s ease-in-out -.55s infinite alternate}
-html[data-tail=dash]:not([data-tier=quiet]) #tail{animation:bt-tail-dash .55s ease-in-out -.275s infinite alternate}
-@keyframes bt-seek{0%,100%{transform:rotate(-4deg)}50%{transform:translateY(calc(-2.9 * var(--u))) rotate(-1deg)}}
-@keyframes bt-scan{0%,100%{transform:translateX(-12%)}50%{transform:translateX(12%)}}
-@keyframes bt-bob{0%,100%{transform:none}30%{transform:translateY(calc(-2.3 * var(--u))) rotate(-5deg)}65%{transform:rotate(4deg)}}
-@keyframes bt-blink{0%,42%,50%,100%{transform:none}46%{transform:scaleY(.03)}48%{transform:scaleY(1.06)}}
-@keyframes bt-ponder{0%,100%{transform:rotate(4deg)}50%{transform:translateY(calc(-1.7 * var(--u))) rotate(7deg)}}
-@keyframes bt-squint{0%,100%{transform:translate(0,-4%) scaleY(.7)}50%{transform:translate(5%,-5%) scaleY(.78)}}
-@keyframes bt-dash{0%,100%{transform:none}35%{transform:translateX(calc(8.3 * var(--u))) rotate(7deg)}55%{transform:translateX(calc(-1.8 * var(--u))) rotate(-3deg)}}
-@keyframes bt-tail-beat{from{transform:rotate(-5deg)}to{transform:rotate(5deg)}}
-@keyframes bt-tail-dash{from{transform:rotate(-8deg)}to{transform:rotate(8deg)}}
+/* Gentle whole-illustration loops; the eyes, glasses and folio remain the original art. */
+html[data-whale=searching] .whale-loop{animation:bt-seek 2.8s ease-in-out infinite}
+html[data-whale=working] .whale-loop{animation:bt-bob 3.2s ease-in-out infinite}
+html[data-whale=pondering] .whale-loop{animation:bt-ponder 3.8s ease-in-out infinite}
+html[data-whale=sending] .whale-loop{animation:bt-dash 2.6s ease-in-out infinite}
+@keyframes bt-seek{0%,100%{transform:rotate(-2deg)}50%{transform:translateY(-2px) rotate(1deg)}}
+@keyframes bt-bob{0%,100%{transform:none}50%{transform:translateY(-3px) rotate(1deg)}}
+@keyframes bt-ponder{0%,100%{transform:rotate(2deg)}50%{transform:translateY(-1px) rotate(3deg)}}
+@keyframes bt-dash{0%,100%{transform:none}50%{transform:translateY(-3px) rotate(-2deg)}}
+html[data-tier=quiet] .whale-loop{animation:none}
 
 /* hand-off: window-level content fades */
-html[data-exit~=caption] .caption,html[data-exit~=all] :is(.voice,.water,.ring,.props,.spout,.sheet,.place){opacity:0;transition:opacity .16s}
+html[data-exit~=caption] .caption,html[data-exit~=all] :is(.voice,.ring,.props,.sheet,.place){opacity:0;transition:opacity .16s}
 html[data-hidden] *{animation-play-state:paused!important}
 
-/* reduced motion (ui-standard 9.6, styles.js:106): static whale, fades only */
-:root[data-eyes=squint] .bt-eye{transform:translate(0,-4%) scaleY(.7)}
-:root[data-eyes=heavy] .bt-eye{transform:translateY(1.5px) scaleY(.55)}
-:root[data-eyes=happy] .bt-eye{transform:scaleY(0)}
-:root[data-eyes=happy] .bt-eye-happy{opacity:1}
+/* Reduced motion: static illustration, fades only. */
 @media (prefers-reduced-motion:reduce){
-:root :is(.whale-x,.whale-gaze,.whale,.whale-move,.whale-loop,#tail,#gaze,#eye-pair,.bt-eye,.bt-eye-happy,.ripple,.stage){animation:none!important;transition:none!important}
+:root{--bt-fx-blur-6:none}
+:root :is(.whale-x,.whale-gaze,.whale,.whale-move,.whale-loop,.ripple,.stage){animation:none!important;transition:none!important}
 :root :is(.voice,.water,.place,.arc-base,.arc-glow,.ring,.props,.props *){animation:none!important}
 :root .props>g{scale:none!important;transition:opacity .12s!important}
 :root :is(.arc-fill,.ring-full){transition-duration:.12s!important}
 :root .voice>span{animation:none!important;background:none!important;color:var(--bt-ink)!important}
-:root :is(.voice,.caption>*,.card,.miss,.banner,.log,.confirm,.models,[data-u]){filter:none!important;scale:none!important;transition-property:opacity!important;transition-duration:.12s!important;transition-delay:0s!important}
+:root :is(.voice,.caption>*,.card,.miss,.banner,.log,.confirm,.models,.more,[data-u]){filter:none!important;scale:none!important;transition-property:opacity!important;transition-duration:.12s!important;transition-delay:0s!important}
+:root .disclose svg{transition:none!important}
 :root .btn:active{scale:none}
 :root[data-exit~=lane] .lane{opacity:0;transition:opacity .12s}
 }
+:root[data-effects=reduced],:root[data-effects=off]{--bt-fx-blur-6:none}
+:root:is([data-effects=reduced],[data-effects=off]) .voice>span{animation:none!important;background:none!important;color:var(--bt-ink)!important}
+:root:is([data-effects=reduced],[data-effects=off]) :is(.arc-glow,.page,.gear-big,.gear-small,[data-p=engine],.box-moving,.mate),:root:is([data-effects=reduced],[data-effects=off])[data-whale] :is(.whale-loop){animation:none!important}
+:root[data-effects=off] :is(*,::before,::after){animation:none!important;transition:none!important}
+:root[data-effects=off] .props>g,:root[data-effects=off] .btn:active{scale:none!important}
+:root[data-effects=off] :is(.voice,.caption>*,.card,.miss,.banner,.log,.confirm,.models,.more,[data-u]){filter:none!important;scale:none!important}
 
-@media (forced-colors:active){.sheet-edge{background:CanvasText}.sheet-fill{background:Canvas}.btn{border:1px solid ButtonText}.bar-fill{background:Highlight}.water{background:CanvasText}.arc .arc-base{stroke:GrayText!important}.arc-fill,.ring-full,.arc-glow,.plume path{stroke:Highlight}.props :is(.folder-back,.folder-front,.gear,.mate circle,.box rect){fill:CanvasText}.page rect,.mate rect{fill:Canvas}.drop{forced-color-adjust:none;background:Highlight}}
+@media (forced-colors:active){.sheet-edge{background:CanvasText}.sheet-fill{background:Canvas}.btn{border:1px solid ButtonText}.bar-fill{background:Highlight}.arc .arc-base{stroke:GrayText!important}.arc-fill,.ring-full,.arc-glow{stroke:Highlight}.props :is(.folder-back,.folder-front,.gear,.mate circle,.box rect){fill:CanvasText}.page rect,.mate rect{fill:Canvas}}

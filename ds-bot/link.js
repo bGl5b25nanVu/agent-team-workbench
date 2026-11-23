@@ -5,6 +5,8 @@ var LINK_PATH = "/v1/link";
 var MAX_CONTROL_FRAME_BYTES = 64 * 1024;
 var MAX_RELAY_FRAME_BYTES = 1024 * 1024;
 var SECURE_FRAGMENT_CHUNK_BYTES = 48 * 1024;
+var MAX_RELAY_BYTES_PER_SECOND = 8 * MAX_RELAY_FRAME_BYTES;
+var MAX_RELAY_FRAMES_PER_SECOND = 512;
 var MAX_SECURE_MESSAGE_BYTES = 4 * 1024 * 1024;
 var SECURE_FRAGMENT_MAGIC = new Uint8Array([68, 83, 66, 70]);
 var SECURE_FRAGMENT_VERSION = 1;
@@ -2449,9 +2451,6 @@ function generateKeyPair(privateKeyBytes) {
     privateKey: toBase64Url(privateKey),
     publicKey: toBase64Url(x25519.getPublicKey(privateKey))
   };
-}
-function identityFingerprint(publicKey) {
-  return Array.from(sha2562(fromBase64Url(publicKey)).slice(0, 6), (byte) => byte.toString(16).padStart(2, "0")).join("").toUpperCase();
 }
 function deviceIdFor(publicKey) {
   const key = fromBase64Url(publicKey);
@@ -7381,6 +7380,7 @@ function pairingUri(offer) {
     code: offer.code,
     name: offer.name
   });
+  if (offer.device !== void 0) query.set("device", offer.device);
   return `${PAIRING_SCHEME}//pair?${query}`;
 }
 function parsePairingUri(uri) {
@@ -7402,6 +7402,9 @@ function parsePairingUri(uri) {
     code: field("code"),
     name: (url.searchParams.get("name") ?? "").slice(0, MAX_NAME)
   };
+  const device = url.searchParams.get("device");
+  if (device !== null && device !== "browser") throw new Error("The pairing device is invalid.");
+  if (device === "browser") offer.device = device;
   if (deviceIdFor(offer.hostKey) !== offer.hostDeviceId) throw new Error("The pairing code does not match its computer.");
   return offer;
 }
@@ -7411,7 +7414,7 @@ var DeviceRegistry = class {
   onChange;
   now;
   constructor(devices = [], onChange, now = Date.now) {
-    for (const device of devices) this.devices.set(device.deviceId, { ...device });
+    for (const device of devices) this.devices.set(device.deviceId, { ...device, kind: device.kind === "browser" ? "browser" : "phone" });
     this.onChange = onChange;
     this.now = now;
   }
@@ -7419,8 +7422,8 @@ var DeviceRegistry = class {
     return [...this.devices.values()].map((device) => ({ ...device }));
   }
   openPairing(ttlMs = 5 * 6e4) {
-    this.pairing = { code: randomToken(18), expiresAt: this.now() + ttlMs, misses: 0 };
-    return { code: this.pairing.code, expiresAt: this.pairing.expiresAt };
+    this.pairing = { code: randomToken(18), browserCode: randomToken(18), expiresAt: this.now() + ttlMs, misses: 0 };
+    return { code: this.pairing.code, browserCode: this.pairing.browserCode, expiresAt: this.pairing.expiresAt };
   }
   closePairing() {
     this.pairing = void 0;
@@ -7438,13 +7441,14 @@ var DeviceRegistry = class {
     if (this.matches(deviceId, identityKey)) return true;
     if (hello.pairingCode === void 0 || !this.pairingOpen()) return false;
     const pairing = this.pairing;
-    if (!sameText(hello.pairingCode, pairing.code)) {
+    const kind = sameText(hello.pairingCode, pairing.browserCode) ? "browser" : "phone";
+    if (kind === "phone" && !sameText(hello.pairingCode, pairing.code)) {
       pairing.misses += 1;
       if (pairing.misses >= 5) this.pairing = void 0;
       return false;
     }
     this.pairing = void 0;
-    this.devices.set(deviceId, { deviceId, identityKey, name: hello.name ?? "", pairedAt: this.now() });
+    this.devices.set(deviceId, { deviceId, identityKey, name: hello.name ?? "", pairedAt: this.now(), kind });
     this.onChange?.(this.list());
     return true;
   }
@@ -7485,11 +7489,19 @@ var BaseTransport = class {
     for (const handler of this.closeHandlers) handler();
   }
 };
-async function waitForRelayCapacity(socket) {
+var nextSends = /* @__PURE__ */ new WeakMap();
+async function waitForRelayCapacity(socket, wireBytes = 0) {
   const started = Date.now();
   while ((socket.bufferedAmount ?? 0) > 512 * 1024) {
     if (socket.readyState !== 1 || Date.now() - started > 1e4) throw new Error("Relay consumer is too slow or disconnected");
     await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  if (wireBytes > 0) {
+    const now = Date.now();
+    const due = Math.max(now, nextSends.get(socket) ?? now);
+    const interval = Math.max(1e3 / (MAX_RELAY_FRAMES_PER_SECOND - 1), 1e3 * wireBytes / (MAX_RELAY_BYTES_PER_SECOND - MAX_RELAY_FRAME_BYTES));
+    nextSends.set(socket, due + interval);
+    if (due > now) await new Promise((resolve) => setTimeout(resolve, Math.ceil(due - now)));
   }
   if (socket.readyState !== 1) throw new Error("Relay transport closed");
 }
@@ -7813,13 +7825,15 @@ var HostLink = class {
       for (const plaintext of tunnel.outgoing.encode(data)) {
         if (this.tunnels.get(tunnel.connectionId) !== tunnel || this.socket === void 0) throw new Error("The tunnel closed.");
         const ciphertext = tunnel.noise.encrypt(plaintext);
-        await waitForRelayCapacity(this.socket);
-        this.sendControl("relay", {
+        const socket = this.socket;
+        const frame = encodeControlFrame(createControlFrame("relay", {
           connectionId: tunnel.connectionId,
           targetDeviceId: tunnel.deviceId,
           counter: tunnel.counter,
           ciphertext: toBase64Url(ciphertext)
-        });
+        }), this.limits);
+        await waitForRelayCapacity(socket, new TextEncoder().encode(frame).byteLength);
+        socket.send(frame);
         tunnel.counter += 1;
       }
     });
@@ -7866,9 +7880,12 @@ var RelayTransport = class extends BaseTransport {
   readyReject;
   handshakeTimer;
   controlFrameLimits = {};
-  /** Last frame heard from the current socket, and when the pending probe went out (0 = none). */
+  /** Last frame heard from the current socket, unanswered probe start/last ping timestamps (0 = none), and its timer. */
   lastHeard = 0;
   probeAt = 0;
+  pingSentAt = 0;
+  probeDeadline = 0;
+  probeTimer;
   /** Ends the current socket (reports its close once, without waiting for its close event). */
   endCurrent;
   url;
@@ -7907,14 +7924,16 @@ var RelayTransport = class extends BaseTransport {
           this.endCurrent = void 0;
         }
         if (watchdog !== void 0) clearInterval(watchdog);
+        this.clearProbe();
         if (emit) this.emitClose();
       };
       this.endCurrent = endSocket;
       this.lastHeard = Date.now();
-      this.probeAt = 0;
+      this.clearProbe();
       socket.onmessage = (event) => {
         if (!stale()) {
           this.lastHeard = Date.now();
+          this.clearProbe();
           this.handleSocketMessage(event.data);
         }
       };
@@ -7937,6 +7956,7 @@ var RelayTransport = class extends BaseTransport {
         if (this.socket !== void 0 && stale()) return;
         ended = true;
         if (watchdog !== void 0) clearInterval(watchdog);
+        this.clearProbe();
         if (this.readyReject !== void 0) this.failConnection(Object.assign(new Error("Relay control channel closed before it was ready"), { code: "SERVER_UNREACHABLE" }));
         this.socket = void 0;
         this.connectionId = void 0;
@@ -7958,13 +7978,15 @@ var RelayTransport = class extends BaseTransport {
   async send(data) {
     if (this.socket?.readyState !== 1) throw new Error("relay transport is not connected");
     if (this.connectionId === void 0) throw new Error("relay connection has not been authorized");
-    await waitForRelayCapacity(this.socket);
-    this.sendControl("relay", {
+    const socket = this.socket;
+    const frame = encodeControlFrame(createControlFrame("relay", {
       connectionId: this.connectionId,
       targetDeviceId: this.options.targetDeviceId,
       counter: this.relayCounter,
       ciphertext: toBase64Url(data)
-    });
+    }), this.controlFrameLimits);
+    await waitForRelayCapacity(socket, new TextEncoder().encode(frame).byteLength);
+    socket.send(frame);
     this.bytesSent += data.byteLength;
     this.relayCounter += 1;
   }
@@ -7991,22 +8013,51 @@ var RelayTransport = class extends BaseTransport {
     this.handshakeHandlers.add(cb);
     return () => this.handshakeHandlers.delete(cb);
   }
-  /** Ask the Server for a liveness reply now; a dead socket ends itself via the watchdog. */
-  probe() {
-    if (this.socket?.readyState !== 1 || this.connectionId === void 0 || this.probeAt > 0) return;
-    this.probeNow();
+  /** Ask the Server for a liveness reply now; a dead socket ends itself promptly. */
+  probe(timeoutMs) {
+    const socket = this.socket;
+    if (socket === void 0 || this.connectionId === void 0) return;
+    if (socket.readyState > 1) {
+      this.endCurrent?.(Object.assign(new Error("The connection to the Server closed"), { code: "SERVER_UNREACHABLE" }));
+      return;
+    }
+    if (socket.readyState !== 1) return;
+    const limit = timeoutMs ?? (this.options.probeTimeoutMs ?? 1e4);
+    const now = Date.now();
+    if (this.probeAt === 0 || now - this.pingSentAt >= Math.min(limit, 1e3)) this.probeNow(now);
+    const deadline = now + limit;
+    if (this.probeTimer !== void 0 && deadline >= this.probeDeadline) return;
+    if (this.probeTimer !== void 0) clearTimeout(this.probeTimer);
+    this.probeDeadline = deadline;
+    this.probeTimer = setTimeout(() => {
+      this.probeTimer = void 0;
+      this.probeDeadline = 0;
+      if (this.socket !== socket || this.probeAt === 0) return;
+      this.endCurrent?.(Object.assign(new Error("The Server stopped answering"), { code: "SERVER_UNREACHABLE" }));
+    }, Math.max(0, limit));
   }
-  probeNow() {
+  clearProbe() {
+    this.probeAt = 0;
+    this.pingSentAt = 0;
+    this.probeDeadline = 0;
+    if (this.probeTimer !== void 0) {
+      clearTimeout(this.probeTimer);
+      this.probeTimer = void 0;
+    }
+  }
+  probeNow(now = Date.now()) {
     if (this.socket === void 0) return;
-    this.probeAt = Date.now();
+    if (this.probeAt === 0) this.probeAt = now;
+    this.pingSentAt = now;
     try {
-      this.sendControl("ping", { nonce: this.probeAt });
+      this.sendControl("ping", { nonce: now });
     } catch {
       this.endCurrent?.(Object.assign(new Error("The Server stopped answering"), { code: "SERVER_UNREACHABLE" }));
     }
   }
   async close() {
     this.clearHandshake();
+    this.clearProbe();
     const end = this.endCurrent;
     if (end !== void 0) {
       end();
@@ -8194,8 +8245,8 @@ var RpcClient = class {
   getStats() {
     return this.transport.getStats();
   }
-  probe() {
-    this.transport.probe?.();
+  probe(timeoutMs) {
+    this.transport.probe?.(timeoutMs);
   }
   async close() {
     this.unsubscribeTransport?.();
@@ -8331,8 +8382,8 @@ var SecureTransport = class {
   onClose(handler) {
     return this.inner.onClose?.(handler) ?? (() => void 0);
   }
-  probe() {
-    this.inner.probe?.();
+  probe(timeoutMs) {
+    this.inner.probe?.(timeoutMs);
   }
   async close() {
     if (this.closed) return;
@@ -8402,6 +8453,8 @@ export {
   HostLink,
   LINK_PATH,
   MAX_CONTROL_FRAME_BYTES,
+  MAX_RELAY_BYTES_PER_SECOND,
+  MAX_RELAY_FRAMES_PER_SECOND,
   MAX_RELAY_FRAME_BYTES,
   MAX_SECURE_MESSAGE_BYTES,
   NOISE_IK_PROTOCOL,
@@ -8429,7 +8482,6 @@ export {
   encodeMessage,
   fromBase64Url,
   generateKeyPair,
-  identityFingerprint,
   messageTypes,
   pairingUri,
   parsePairingUri,

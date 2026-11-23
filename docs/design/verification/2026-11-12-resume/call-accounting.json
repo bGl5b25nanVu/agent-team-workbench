@@ -1,0 +1,80 @@
+{
+  "status": "passed",
+  "commit": "5fd34ac846aa7a51787f3adf232f363e1fd24fb0",
+  "scope": "All model receipts in the fresh final UI profile, including the initial task run and resumed question check",
+  "counts": {
+    "coordinator-group": 1,
+    "group-memory-review": 1,
+    "coordinator-private": 4,
+    "coordinator-private-memory-review": 4
+  },
+  "calls": [
+    {
+      "at": "2026-11-12T10:22:11.293Z",
+      "tokens": 26070,
+      "owner": "coordinator-group"
+    },
+    {
+      "at": "2026-11-12T10:22:13.651Z",
+      "tokens": 1331,
+      "owner": "group-memory-review"
+    },
+    {
+      "at": "2026-11-12T10:22:17.861Z",
+      "tokens": 24615,
+      "owner": "coordinator-private"
+    },
+    {
+      "at": "2026-11-12T10:22:20.573Z",
+      "tokens": 1224,
+      "owner": "coordinator-private-memory-review"
+    },
+    {
+      "at": "2026-11-12T10:22:24.591Z",
+      "tokens": 24871,
+      "owner": "coordinator-private",
+      "answer": [
+        {
+          "question": "接下来先做哪个？",
+          "selected": [
+            "改标题"
+          ]
+        }
+      ]
+    },
+    {
+      "at": "2026-11-12T10:22:26.915Z",
+      "tokens": 1286,
+      "owner": "coordinator-private-memory-review"
+    },
+    {
+      "at": "2026-11-12T10:27:27.524Z",
+      "tokens": 24929,
+      "owner": "coordinator-private"
+    },
+    {
+      "at": "2026-11-12T10:27:30.304Z",
+      "tokens": 1314,
+      "owner": "coordinator-private-memory-review"
+    },
+    {
+      "at": "2026-11-12T10:27:34.280Z",
+      "tokens": 25184,
+      "owner": "coordinator-private",
+      "answer": [
+        {
+          "question": "接下来先做哪个？",
+          "selected": [
+            "改标题"
+          ]
+        }
+      ]
+    },
+    {
+      "at": "2026-11-12T10:27:36.613Z",
+      "tokens": 1323,
+      "owner": "coordinator-private-memory-review"
+    }
+  ],
+  "uncalledMembersDormant": 5
+}

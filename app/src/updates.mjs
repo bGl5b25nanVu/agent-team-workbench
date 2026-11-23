@@ -3,10 +3,13 @@
 // start/text.mjs.
 
 const CHECK_EVERY_MS = 4 * 60 * 60_000
-export const RELEASES_URL = 'https://api.github.com/repos/Fei2411/DS-Bot/releases?per_page=20'
+export const RELEASES_URL = 'https://api.github.com/repos/bGl5b25nanVu/agent-team-workbench/releases?per_page=20'
 // Where a user downloads the newest version by hand.
-export const RELEASE_PAGE = 'https://github.com/Fei2411/DS-Bot/releases/latest'
+export const RELEASE_PAGE = 'https://github.com/bGl5b25nanVu/agent-team-workbench/releases/latest'
 const MB = 1024 * 1024
+// electron-updater 6.8 also reports an empty Atom feed before it selects a release tag.
+const unpublished = error => error?.code === 'ERR_UPDATER_NO_PUBLISHED_VERSIONS'
+  || (error?.code === 'ERR_XML_MISSED_ELEMENT' && error?.message === 'No published versions on GitHub')
 
 function parseVersion(version) {
   if (typeof version !== 'string') return null
@@ -142,6 +145,7 @@ export function watchReleases({ current, arch, fetch = globalThis.fetch, ask, op
   const check = () => { if (!UPDATE_BUSY.has(holder.state().phase)) run() }
   run()
   const timer = setInterval(check, CHECK_EVERY_MS)
+  timer.unref?.()
   return { stop: () => { clearInterval(timer) }, latest: () => latest, state: holder.state, subscribe: holder.subscribe, check }
 }
 
@@ -198,6 +202,12 @@ export function watchUpdates({ updater, beforeInstall, ask, feed, log = console 
   })
   // A downloaded update stays ready: a later failed check does not hide it.
   updater.on('error', (error) => {
+    // A new fork may have no releases yet. electron-updater identifies that state
+    // separately from transport, authentication and malformed-release errors.
+    if (unpublished(error)) {
+      if (holder.state().phase !== 'downloaded') holder.set({ phase: 'current' })
+      return
+    }
     log.error(`DS Bot: update failed: ${error instanceof Error ? error.message : String(error)}`)
     if (holder.state().phase !== 'downloaded') holder.set({ phase: 'failed' })
   })
@@ -214,10 +224,11 @@ export function watchUpdates({ updater, beforeInstall, ask, feed, log = console 
       }
       settled({ phase: 'current' })
       return null
-    }, () => { settled({ phase: 'failed' }); return null })
+    }, (error) => { settled({ phase: unpublished(error) ? 'current' : 'failed' }); return null })
   }
   const check = () => { if (!UPDATE_BUSY.has(holder.state().phase)) run() }
   run()
   const timer = setInterval(check, CHECK_EVERY_MS)
+  timer.unref?.()
   return { stop: () => { clearInterval(timer) }, latest: () => latest, install, state: holder.state, subscribe: holder.subscribe, check }
 }

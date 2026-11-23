@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import { describe, test } from 'node:test'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { GitHubProvider } from 'electron-updater/out/providers/GitHubProvider.js'
 import { isNewer, RELEASES_URL, watchReleases, watchUpdates } from '../src/updates.mjs'
 
 // electron-updater's AppUpdater, as far as the app uses it. `found` makes the answer of a
@@ -42,7 +43,7 @@ const release = (version, options = {}) => {
   const arch = options.arch ?? 'arm64'
   return {
     tag_name: `v${version}`,
-    html_url: options.page ?? `https://github.com/Fei2411/DS-Bot/releases/tag/v${version}`,
+    html_url: options.page ?? `https://github.com/bGl5b25nanVu/agent-team-workbench/releases/tag/v${version}`,
     draft: options.draft ?? false,
     prerelease: options.prerelease ?? false,
     assets: options.assets ?? [{ name: `DS-Bot-${version}-mac-${arch}.zip` }],
@@ -74,6 +75,20 @@ describe('isNewer', () => {
 })
 
 describe('watchReleases', () => {
+  test('an unpublished fork has no update and never asks or opens a download', async (t) => {
+    const log = quietLog()
+    const updates = watchReleases({
+      current: '0.3.2', arch: 'arm64', fetch: async (url) => {
+        assert.equal(url, 'https://api.github.com/repos/bGl5b25nanVu/agent-team-workbench/releases?per_page=20')
+        return releaseResponse([])
+      },
+      ask: () => assert.fail('no release may ask to download'), open: () => assert.fail('no release may open a URL'), log,
+    })
+    t.after(updates.stop)
+    assert.equal(await updates.latest(), null)
+    assert.deepEqual(updates.state(), { phase: 'current' })
+    assert.deepEqual(log.lines, [])
+  })
   test('checks the latest release at once with the GitHub headers, or uses a given feed', async (t) => {
     const calls = []
     const fetch = async (url, options) => {
@@ -96,7 +111,7 @@ describe('watchReleases', () => {
   })
 
   test('reports a newer release and opens its page only when accepted', async (t) => {
-    const page = 'https://github.com/Fei2411/DS-Bot/releases/tag/v0.1.9'
+    const page = 'https://github.com/bGl5b25nanVu/agent-team-workbench/releases/tag/v0.1.9'
     for (const accepted of [true, false]) {
       const asked = []
       const opened = []
@@ -171,7 +186,7 @@ describe('watchReleases', () => {
       [async () => releaseResponse({}, 403), 'DS Bot: update check failed: HTTP 403'],
       [async () => { throw new Error('offline') }, 'DS Bot: update check failed: offline'],
       [async () => ({ ok: true, status: 200, json: async () => { throw new Error('bad JSON') } }), 'DS Bot: update check failed: bad JSON'],
-      [async () => releaseResponse([release('0.1.9', { page: 'http://github.com/Fei2411/DS-Bot' })]), 'DS Bot: update check failed: release page URL is not HTTPS'],
+      [async () => releaseResponse([release('0.1.9', { page: 'http://github.com/bGl5b25nanVu/agent-team-workbench' })]), 'DS Bot: update check failed: release page URL is not HTTPS'],
     ]
     for (const [fetch, message] of cases) {
       const log = quietLog()
@@ -212,14 +227,14 @@ describe('watchReleases', () => {
     attached = true
     t.mock.timers.tick(4 * 60 * 60_000)
     assert.deepEqual(await updates.latest(), {
-      version: '0.1.9', page: 'https://github.com/Fei2411/DS-Bot/releases/tag/v0.1.9',
+      version: '0.1.9', page: 'https://github.com/bGl5b25nanVu/agent-team-workbench/releases/tag/v0.1.9',
     })
     await sleep(0)
     assert.deepEqual(asked, ['0.1.9'])
   })
 
   test('a given asset replaces the mac zip: the deb of a Linux install', async (t) => {
-    const page = 'https://github.com/Fei2411/DS-Bot/releases/tag/v0.1.9'
+    const page = 'https://github.com/bGl5b25nanVu/agent-team-workbench/releases/tag/v0.1.9'
     // The deb's file name uses the Debian architecture (x64 → amd64).
     const deb = version => `DS-Bot-${version}-linux-amd64.deb`
     // A release with only the mac zip does not count for a deb install.
@@ -257,7 +272,7 @@ describe('watchReleases', () => {
     })
     t.after(updates.stop)
     assert.deepEqual(await updates.latest(), {
-      version: '0.2.0-rc.2', page: 'https://github.com/Fei2411/DS-Bot/releases/tag/v0.2.0-rc.2',
+      version: '0.2.0-rc.2', page: 'https://github.com/bGl5b25nanVu/agent-team-workbench/releases/tag/v0.2.0-rc.2',
     })
   })
 
@@ -279,7 +294,7 @@ describe('watchReleases', () => {
     })
     t.after(updates.stop)
     assert.deepEqual(await updates.latest(), {
-      version: '0.1.10', page: 'https://github.com/Fei2411/DS-Bot/releases/tag/v0.1.10',
+      version: '0.1.10', page: 'https://github.com/bGl5b25nanVu/agent-team-workbench/releases/tag/v0.1.10',
     })
   })
 
@@ -322,7 +337,7 @@ describe('watchReleases', () => {
     assert.equal(await none.latest(), null)
     assert.deepEqual(none.state(), { phase: 'current' })
 
-    const page = 'https://github.com/Fei2411/DS-Bot/releases/tag/v0.1.9'
+    const page = 'https://github.com/bGl5b25nanVu/agent-team-workbench/releases/tag/v0.1.9'
     const found = watchReleases({
       current: '0.1.7', arch: 'arm64', fetch: async () => releaseResponse([release('0.1.9', { page })]), log: quietLog(),
     })
@@ -391,6 +406,39 @@ describe('watchReleases', () => {
 })
 
 describe('watchUpdates', () => {
+  test('the actual GitHub provider empty feed is treated as no available update', async (t) => {
+    const provider = new GitHubProvider({ owner: 'bGl5b25nanVu', repo: 'agent-team-workbench' }, { allowPrerelease: false }, { platform: 'win32', executor: {} })
+    provider.httpRequest = async () => '<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><title>Releases</title></feed>'
+    const updater = new FakeUpdater()
+    updater.checkForUpdates = () => {
+      updater.emit('checking-for-update')
+      return provider.getLatestVersion().catch(error => { updater.emit('error', error); throw error })
+    }
+    const log = quietLog()
+    const updates = watchUpdates({ updater, beforeInstall: async () => {}, log })
+    t.after(updates.stop)
+    assert.equal(await updates.latest(), null)
+    assert.deepEqual(updates.state(), { phase: 'current' })
+    assert.deepEqual(log.lines, [])
+  })
+  test('an unpublished fork is current without hiding real updater failures', async (t) => {
+    const updater = new FakeUpdater()
+    const empty = Object.assign(new Error('No published versions on GitHub'), { code: 'ERR_UPDATER_NO_PUBLISHED_VERSIONS' })
+    updater.checkForUpdates = () => {
+      updater.emit('checking-for-update')
+      updater.emit('error', empty)
+      return Promise.reject(empty)
+    }
+    const log = quietLog()
+    const updates = watchUpdates({ updater, beforeInstall: async () => {}, log })
+    t.after(updates.stop)
+    assert.equal(await updates.latest(), null)
+    assert.deepEqual(updates.state(), { phase: 'current' })
+    assert.deepEqual(log.lines, [])
+    updater.emit('error', new Error('offline'))
+    assert.deepEqual(updates.state(), { phase: 'failed' })
+    assert.match(log.lines[0], /offline/u)
+  })
   test('downloads in the background, installs at the quit, and checks at once', (t) => {
     const updater = new FakeUpdater()
     t.after(watchUpdates({ updater, beforeInstall: async () => {}, log: quietLog() }).stop)

@@ -3,11 +3,20 @@ import { DICTIONARY } from '../../../ds-bot/src/client/i18n.js'
 // Phone copy shares the desktop dictionary. Mobile-only strings have their own
 // Chinese entries here; the English source stays the key, as on the desktop.
 const ZH = DICTIONARY.zh as Record<string, string>
-// Words the desktop uses in another sense (its "New" badge, "Light" motion,
-// the browser's "Back"); the phone's own meaning wins for these.
-const MOBILE_SENSE = new Set(['New', 'Light', 'Back'])
+// Words the desktop uses in another sense (its "New" badge, "Light" motion, the
+// browser's "Back", the "Not parsed" meaning of "Unknown"); the phone's own meaning
+// wins for these.
+const MOBILE_SENSE = new Set(['New', 'Light', 'Back', 'Unknown'])
 
 const MOBILE_ZH: Record<string, string> = {
+  "This is the phone app's code. In Settings → Phone on the computer, use Open in a browser or Copy browser link.": '这是手机 App 的配对码。请在电脑的设置 → 手机中选择“在浏览器中打开”或“复制浏览器链接”。',
+  'This is a browser pairing link. In Settings → Phone on the computer, scan the QR code to pair the phone app.': '这是浏览器配对链接。请在电脑的设置 → 手机中扫描二维码以配对手机 App。',
+  'Not available from a browser. Use the phone app or the computer.': '浏览器不支持此操作。请使用手机 App 或电脑。',
+  'This is not a DS Bot pairing code.': '这不是 DS Bot 配对码。',
+  'DS Bot is open in another tab': 'DS Bot 已在另一个标签页中打开',
+  'This browser cannot keep a single DS Bot tab active. Use a browser with Web Locks over HTTPS or localhost.': '此浏览器无法确保只有一个 DS Bot 标签页处于活动状态。请使用支持 Web Locks 的浏览器，并通过 HTTPS 或 localhost 访问。',
+  'On the computer, open DS Bot, go to Settings → Phone and copy the pairing link. Paste it here.': '在电脑上打开 DS Bot，进入设置 → 手机，复制配对链接并粘贴到这里。',
+  'Pick a folder from Folders.': '请从“文件夹”中选择一个文件夹。',
   'Asks for the secret {name}': '请求密钥 {name}',
   '{bot} asks for the secret {name}': '{bot} 请求密钥 {name}',
   'Pair with your computer': '与电脑配对',
@@ -43,6 +52,7 @@ const MOBILE_ZH: Record<string, string> = {
   'Message {name}': '发消息给 {name}',
   'Your answer': '你的回答',
   'No messages yet': '还没有消息',
+  '{count} new': '{count} 条新消息',
   'asked for work': '来要工作',
   'replied': '回复了',
   'reported back': '交回了工作',
@@ -82,6 +92,7 @@ const MOBILE_ZH: Record<string, string> = {
   'New Bot': '新 Bot',
   'Create new Bot': '创建新 Bot',
   'Create group chat': '创建群聊',
+  'Add DSH Agent': '添加 DSH Agent',
   'Create': '创建',
   'New group': '新群聊',
   'New': '新建',
@@ -104,6 +115,9 @@ const MOBILE_ZH: Record<string, string> = {
   'Browser handoff': '浏览器交接', 'View': '查看',
   'Aside': '旁注', 'Delete aside': '删除旁注',
   'This file cannot be read here': '这个文件在这里读不了',
+  'Save {name}': '保存 {name}',
+  'Saving to the device is not available on this phone': '这台手机还不能保存到本机',
+  'Could not save this file': '保存这个文件失败',
   'Paused after {count} Bot relays. Waiting: {names}': '{count} 次 Bot 接力后暂停。还在等：{names}',
   'Side chat': '旁聊', 'Ask about the work so far': '问一下目前的进展',
   'Answering…': '正在回答…', 'Cancel this side question': '取消这个旁问',
@@ -115,7 +129,7 @@ const MOBILE_ZH: Record<string, string> = {
   'Arguments (one per line)': '参数（一行一个）', 'Environment': '环境', 'Headers': '请求头',
   'URL': '地址', 'Skill instructions': '技能说明', '{label} must be a JSON object.': '{label} 必须是 JSON 对象。',
   'Save changes': '保存修改', 'Error': '出错',
-  'Ready': '就绪', 'Needs approval': '需要批准', 'Pack': '套件', 'No items': '没有项目',
+  'Ready': '就绪', 'Needs approval': '需要批准', 'Unknown': '未知', 'Pack': '套件', 'No items': '没有项目',
   'Local command': '本地命令', 'HTTP server': 'HTTP 服务', 'Skill': '技能',
   'Approve': '批准', 'Save an MCP server or skill first.': '先保存一个 MCP 服务或技能。',
   'Updating DS Bot…': '正在更新 DS Bot…', 'Restart DSH to start using DS Bot {version}.': '重启 DSH 后开始用 DS Bot {version}。',
@@ -201,9 +215,14 @@ const MOBILE_ZH: Record<string, string> = {
   '{name} {event}': '{name}{event}',
   '{count} images': '{count} 张图片',
   'Waiting for your approval': '等你批准',
+  'Background tasks': '后台任务',
+  '{count} background tasks running': '{count} 个后台任务运行中',
+  'Waiting for approval': '待批准',
+  'Running': '运行中',
   'Allow': '允许',
   'Reject': '拒绝',
   'Answer on the computer.': '在电脑上回答。',
+  'Set up your mailbox on the computer.': '请在电脑上设置邮箱。',
   'This question is no longer open.': '这个问题已经关闭了。',
   'This approval is no longer open.': '这项批准已经关闭了。',
   'Submit': '提交',
@@ -223,6 +242,24 @@ const MOBILE_ZH: Record<string, string> = {
   'Secret requests': '密钥',
   'Cards': '卡片',
   'Demo team': '演示团队',
+  'Read full message': '查看完整消息',
+  'Confirmation needed': '需要确认',
+  'Your turn in the browser': '请接手浏览器',
+  'Browser handoffs': '浏览器交接',
+  'Approval': '批准',
+  'Question': '提问',
+  'Allow a secret': '填写密钥',
+  'the Bot': 'Bot',
+  '{name} could not answer: {reason}': '{name} 无法回答：{reason}',
+  'Copy data (CSV)': '复制数据（CSV）',
+  'Something went wrong': '出了点问题',
+  'Unknown error': '未知错误',
+  'New reply': '新回复',
+  'Table': '表格',
+  'Expand': '展开',
+  'Scheduled task': '定时任务',
+  'Jump to latest': '回到底部',
+  'New messages below': '下方有新消息',
 }
 
 const systemZh = (): boolean => {
@@ -271,6 +308,9 @@ const midnight = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(
 const daysBefore = (time: number, now: number) => Math.round((midnight(new Date(now)) - midnight(new Date(time))) / 86400000)
 const WEEK_ZH = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 const WEEK_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const ISO_WEEK_ZH = ['', '一', '二', '三', '四', '五', '六', '日']
+const ISO_WEEK_EN = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+export const weekdayShort = (day: number) => (isZh() ? ISO_WEEK_ZH[day] : ISO_WEEK_EN[day]) ?? String(day)
 export function clockLabel(time: number, now = Date.now()): string {
   const days = daysBefore(time, now)
   if (days === 0) return t('Today {time}', { time: clock(time) })

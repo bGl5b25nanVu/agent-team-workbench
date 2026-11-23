@@ -1,0 +1,288 @@
+{
+  "status": "failed",
+  "startedAt": "2026-11-12T10:22:06.242Z",
+  "previousFlow": "/workspace/gongzuo-resume-20261112/evidence/final-ui/result.json",
+  "commit": "e9a9caf35aa0f3f7c6d763af063859a48dee5ac8",
+  "teamName": "UI verification mwdeenkp",
+  "coordinatorName": "Coordinator mwdeenkp",
+  "bench": "gongzuo-final-ui",
+  "origin": "http://127.0.0.1:44175",
+  "browser": "/usr/bin/google-chrome",
+  "steps": [
+    {
+      "name": "validate-existing-isolated-team",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:22:06.249Z",
+      "detail": {
+        "existingGoal": false,
+        "members": [
+          {
+            "name": "Coordinator mwdeenkp",
+            "dormant": true
+          },
+          {
+            "name": "Researcher mwdeenkp",
+            "dormant": true
+          },
+          {
+            "name": "Engineer mwdeenkp",
+            "dormant": true
+          },
+          {
+            "name": "Designer mwdeenkp",
+            "dormant": true
+          },
+          {
+            "name": "Tester mwdeenkp",
+            "dormant": true
+          },
+          {
+            "name": "Operator mwdeenkp",
+            "dormant": true
+          }
+        ]
+      },
+      "durationMs": 4
+    },
+    {
+      "name": "authenticate-and-open-created-team",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:22:06.253Z",
+      "durationMs": 3012
+    },
+    {
+      "name": "submit-first-goal-through-ui",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:22:09.269Z",
+      "detail": {
+        "submittedThisRun": true
+      },
+      "durationMs": 855
+    },
+    {
+      "name": "only-coordinator-starts-for-first-goal",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:22:10.124Z",
+      "detail": {
+        "calls": [
+          {
+            "at": "2026-11-12T10:22:11.293Z",
+            "tokens": 26070,
+            "owner": "coordinator-group",
+            "tools": []
+          },
+          {
+            "at": "2026-11-12T10:22:13.651Z",
+            "tokens": 1331,
+            "owner": "group-memory-review",
+            "tools": []
+          }
+        ],
+        "counts": {
+          "coordinator-group": 1,
+          "group-memory-review": 1
+        },
+        "members": [
+          {
+            "name": "Coordinator mwdeenkp",
+            "dormant": false
+          },
+          {
+            "name": "Researcher mwdeenkp",
+            "dormant": true
+          },
+          {
+            "name": "Engineer mwdeenkp",
+            "dormant": true
+          },
+          {
+            "name": "Designer mwdeenkp",
+            "dormant": true
+          },
+          {
+            "name": "Tester mwdeenkp",
+            "dormant": true
+          },
+          {
+            "name": "Operator mwdeenkp",
+            "dormant": true
+          }
+        ],
+        "goalStatus": "drafting"
+      },
+      "durationMs": 6937
+    },
+    {
+      "name": "ask-a-real-question-in-coordinator-chat",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:22:17.065Z",
+      "durationMs": 6721
+    },
+    {
+      "name": "inbox-opens-the-question-conversation",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:22:23.786Z",
+      "durationMs": 590
+    },
+    {
+      "name": "answer-question-and-clear-inbox",
+      "status": "passed",
+      "startedAt": "2026-11-12T10:22:24.377Z",
+      "durationMs": 5804
+    },
+    {
+      "name": "verify-remaining-members-and-browser-errors",
+      "status": "failed",
+      "startedAt": "2026-11-12T10:22:30.182Z",
+      "error": "AssertionError [ERR_ASSERTION]: An unexpected Session made a model request\n    at file:///workspace/gongzuo-resume-20261112/repo/ds-bot/dev/team-ui-task-flow.mjs:325:12\n    at step (file:///workspace/gongzuo-resume-20261112/repo/ds-bot/dev/team-ui-task-flow.mjs:88:26)\n    at file:///workspace/gongzuo-resume-20261112/repo/ds-bot/dev/team-ui-task-flow.mjs:318:9",
+      "durationMs": 75
+    }
+  ],
+  "screenshots": [
+    "01-existing-team.png",
+    "02-first-goal-compose.png",
+    "03-goal-drafting-dashboard.png",
+    "04-real-question-card.png",
+    "05-question-inbox.png",
+    "06-inbox-keeps-question-pending.png",
+    "07-question-opened-from-inbox.png",
+    "08-answered-question.png",
+    "09-inbox-after-answer.png",
+    "failed-verify-remaining-members-and-browser-errors.png"
+  ],
+  "pageErrors": [],
+  "consoleErrors": [],
+  "coverage": {
+    "goalSubmission": "passed",
+    "coordinatorOnlyDispatch": "passed",
+    "questionCreation": "passed",
+    "inboxNavigation": "passed",
+    "questionAnswer": "passed",
+    "goalPlanningAndStages": "not-covered: the existing mock does not call group_goal to plan or progress stages",
+    "permissionApproval": "not-covered: the existing escalation fixture asks for full-access shell execution; this test does not expand permissions",
+    "realProviderQuality": "not-covered: scripted mock model only"
+  },
+  "goalAlreadySubmitted": false,
+  "firstGoalEvidence": {
+    "calls": [
+      {
+        "at": "2026-11-12T10:22:11.293Z",
+        "tokens": 26070,
+        "owner": "coordinator-group",
+        "tools": []
+      },
+      {
+        "at": "2026-11-12T10:22:13.651Z",
+        "tokens": 1331,
+        "owner": "group-memory-review",
+        "tools": []
+      }
+    ],
+    "counts": {
+      "coordinator-group": 1,
+      "group-memory-review": 1
+    },
+    "members": [
+      {
+        "name": "Coordinator mwdeenkp",
+        "dormant": false
+      },
+      {
+        "name": "Researcher mwdeenkp",
+        "dormant": true
+      },
+      {
+        "name": "Engineer mwdeenkp",
+        "dormant": true
+      },
+      {
+        "name": "Designer mwdeenkp",
+        "dormant": true
+      },
+      {
+        "name": "Tester mwdeenkp",
+        "dormant": true
+      },
+      {
+        "name": "Operator mwdeenkp",
+        "dormant": true
+      }
+    ],
+    "goalStatus": "drafting"
+  },
+  "answerEvidence": {
+    "questionId": "12af9442-aff5-40dd-9357-17a710ac5f4d",
+    "callId": "call-3-0",
+    "selectedAnswer": "改标题",
+    "receivedAnswer": {
+      "id": "12af9442-aff5-40dd-9357-17a710ac5f4d",
+      "question": "接下来先做哪个？",
+      "selected": [
+        "改标题"
+      ],
+      "customPresent": false
+    },
+    "calls": [
+      {
+        "at": "2026-11-12T10:22:24.591Z",
+        "tokens": 24871,
+        "owner": "coordinator-private",
+        "tools": []
+      },
+      {
+        "at": "2026-11-12T10:22:26.915Z",
+        "tokens": 1286,
+        "owner": "unexpected-session",
+        "tools": []
+      }
+    ]
+  },
+  "newCalls": [
+    {
+      "at": "2026-11-12T10:22:11.293Z",
+      "tokens": 26070,
+      "owner": "coordinator-group",
+      "tools": []
+    },
+    {
+      "at": "2026-11-12T10:22:13.651Z",
+      "tokens": 1331,
+      "owner": "group-memory-review",
+      "tools": []
+    },
+    {
+      "at": "2026-11-12T10:22:17.861Z",
+      "tokens": 24615,
+      "owner": "coordinator-private",
+      "tools": [
+        "ask_user"
+      ]
+    },
+    {
+      "at": "2026-11-12T10:22:20.573Z",
+      "tokens": 1224,
+      "owner": "unexpected-session",
+      "tools": []
+    },
+    {
+      "at": "2026-11-12T10:22:24.591Z",
+      "tokens": 24871,
+      "owner": "coordinator-private",
+      "tools": []
+    },
+    {
+      "at": "2026-11-12T10:22:26.915Z",
+      "tokens": 1286,
+      "owner": "unexpected-session",
+      "tools": []
+    }
+  ],
+  "callCounts": {
+    "coordinator-group": 1,
+    "group-memory-review": 1,
+    "coordinator-private": 2,
+    "unexpected-session": 2
+  },
+  "error": "AssertionError [ERR_ASSERTION]: An unexpected Session made a model request\n    at file:///workspace/gongzuo-resume-20261112/repo/ds-bot/dev/team-ui-task-flow.mjs:325:12\n    at step (file:///workspace/gongzuo-resume-20261112/repo/ds-bot/dev/team-ui-task-flow.mjs:88:26)\n    at file:///workspace/gongzuo-resume-20261112/repo/ds-bot/dev/team-ui-task-flow.mjs:318:9",
+  "finishedAt": "2026-11-12T10:22:30.360Z"
+}

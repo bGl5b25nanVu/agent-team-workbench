@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process'
 import { test } from 'node:test'
 import { parse } from 'yaml'
 import { UUID } from 'builder-util-runtime'
-import { APP_ID, configureIdentity, LEGACY_ARTIFACT_PREFIX, LEGACY_PRODUCT_NAME } from '../src/legacy.mjs'
+import { APP_ID, configureIdentity, LEGACY_ARTIFACT_PREFIX, LEGACY_PRODUCT_NAME, PRODUCT_NAME, SHELL_DATA_NAME } from '../src/legacy.mjs'
 
 function fixture({ saved = [], packaged = true } = {}) {
   const app = new EventEmitter()
@@ -41,15 +41,35 @@ for (const platform of ['win32', 'darwin', 'linux']) {
     } else {
       assert.deepEqual(f.names, [LEGACY_PRODUCT_NAME])
       f.app.emit('ready')
-      assert.deepEqual(f.names, [LEGACY_PRODUCT_NAME, 'DS Bot'])
+      assert.deepEqual(f.names, [LEGACY_PRODUCT_NAME, PRODUCT_NAME])
     }
   })
 }
 
-test('a fresh installation uses the new shell directory', () => {
+test('a fresh installation retains the compatible shell directory', () => {
   const f = fixture()
   assert.deepEqual(configureIdentity(f.app, { env: {}, platform: 'linux', mkdir: () => {}, exists: f.exists }), { userData: f.current, legacy: false })
-  assert.deepEqual(f.names, [])
+  assert.deepEqual(f.names, [SHELL_DATA_NAME])
+  f.app.emit('ready')
+  assert.deepEqual(f.names, [SHELL_DATA_NAME, PRODUCT_NAME])
+})
+
+test('the Gongzuo package reuses DS Bot shell data before restoring the visible brand', () => {
+  const f = fixture()
+  f.paths.userData = join(f.paths.appData, PRODUCT_NAME)
+  f.app.getLocale = () => 'zh-CN'
+  const saved = [join(f.current, 'locations.json'), f.legacy]
+  assert.deepEqual(configureIdentity(f.app, { env: {}, platform: 'darwin', mkdir: () => {}, exists: path => saved.includes(path) }), { userData: f.current, legacy: false })
+  assert.equal(f.paths.sessionData, f.current)
+  assert.deepEqual(f.names, [SHELL_DATA_NAME], 'Chromium keeps its existing encryption key name')
+  f.app.emit('ready')
+  assert.deepEqual(f.names, [SHELL_DATA_NAME, '共作'])
+})
+
+test('a fresh Gongzuo package also keeps the compatible DS Bot shell directory', () => {
+  const f = fixture()
+  f.paths.userData = join(f.paths.appData, PRODUCT_NAME)
+  assert.deepEqual(configureIdentity(f.app, { env: {}, platform: 'linux', mkdir: () => {}, exists: () => false }), { userData: f.current, legacy: false })
 })
 
 test('an already configured new installation wins when both directories exist', () => {

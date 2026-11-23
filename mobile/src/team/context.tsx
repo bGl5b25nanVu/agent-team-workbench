@@ -1,10 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react'
 import type { PhoneIdentity, SavedComputer } from '../store.ts'
 import { listComputers } from '../store.ts'
-import * as SecureStore from 'expo-secure-store'
+import * as SecureStore from '../storage'
 import type { TeamState } from '../connection.ts'
 import { offline, useTeamLink } from './link.ts'
-import { demoLink } from './demo.ts'
+import { DEMO_HELLO, demoLink } from './demo.ts'
 
 export const DEMO = process.env.EXPO_PUBLIC_DSB_DEMO === '1'
 
@@ -14,6 +14,7 @@ export interface TeamCtx {
   linked?: boolean
   error: string | null
   call: (endpoint: string, payload?: unknown) => Promise<unknown>
+  refresh?: () => void
   computer: SavedComputer | null
   hello?: { api: number | null; capabilities: string[]; boot: string; seq: number } | null
   onFeed?: (handler: (event: string, data: any) => void) => () => void
@@ -24,7 +25,7 @@ export const useTeam = () => useContext(Ctx)
 
 export function TeamProvider({ computer, identity, children }: { computer: SavedComputer; identity: PhoneIdentity; children: ReactNode }) {
   const link = useTeamLink(computer, identity)
-  const value = useMemo<TeamCtx>(() => ({ team: link.team, online: link.online, linked: link.linked, error: link.error, call: link.call, computer, hello: link.hello, onFeed: link.onFeed }), [link.team, link.online, link.linked, link.error, link.call, link.hello, link.onFeed, computer])
+  const value = useMemo<TeamCtx>(() => ({ team: link.team, online: link.online, linked: link.linked, error: link.error, call: link.call, refresh: link.refresh, computer, hello: link.hello, onFeed: link.onFeed }), [link.team, link.online, link.linked, link.error, link.call, link.refresh, link.hello, link.onFeed, computer])
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 
@@ -32,7 +33,7 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   const link = demoLink()
   const computer = useMemo<SavedComputer>(() => ({ server: 'demo', hostDeviceId: 'demo', hostKey: 'demo', name: 'Demo team' }), [])
   useEffect(() => { void seedDemoComputers() }, [])
-  const value = useMemo<TeamCtx>(() => ({ team: link.team, online: true, error: null, call: link.call, computer }), [link.team, link.call, computer])
+  const value = useMemo<TeamCtx>(() => ({ team: link.team, online: true, error: null, call: link.call, computer, hello: DEMO_HELLO }), [link.team, link.call, computer])
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 

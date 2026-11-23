@@ -4,12 +4,36 @@ Copyright 2026 Fei2411 and the DS Bot contributors
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 
 ==============================================================================
+Gongzuo (共作) fork additions
+==============================================================================
+
+Gongzuo is a modified version of DS Bot. The upstream copyright notice,
+license, acknowledgments and third-party notices below are retained.
+Upstream: https://github.com/Fei2411/DS-Bot
+Fork: https://github.com/bGl5b25nanVu/agent-team-workbench
+
+The six Gongzuo character images (coordinator elephant, researcher owl,
+engineer robot, designer fox, tester hedgehog and operator hummingbird) and
+the Gongzuo brand mark are original AI-generated visual material prepared
+for this fork. The images and their copies under docs/design/assets/gongzuo,
+ds-bot/src/host/assets and app/src/start are distributed with this fork under
+the Apache License, Version 2.0, to the extent applicable. They do not grant
+rights in third-party product names or trademarks.
+
+The team workspace interface, creation flow and role presets are fork
+modifications. The software remains based on the DS Bot and DeepSeek
+Harness components described below.
+
+==============================================================================
 Third-party code in this repository
 ==============================================================================
 
 DeepSeek Harness (https://github.com/deepseek-ai/deepseek-harness)
 MIT License, Copyright (c) 2026 DeepSeek
 
+  - mobile/src/ui/icons.tsx FishLogo draws DSH's official mark, the path of
+    FishLogo in @deepseek-ai/dsh-client-ui-primitives (owner: DeepSeek), to
+    name the DSH Agent in the phone app as the desktop sidebar does.
   - ds-bot/dev/desktop-linux/launch.mts follows the steps of
     apps/desktop/scripts/dev.ts in DeepSeek Harness and reuses a few of its
     lines (the release record and the Electron launch arguments). It is a
@@ -118,8 +142,8 @@ MIT License, Copyright (c) 2026 DSH Remote contributors
   DSH Remote.
   - link/src/noise.ts adapts packages/crypto/src/noise.ts (the Noise
     IK session and the remote-key check).
-  - link/src/keys.ts copies the key pair, fingerprint and Base64URL
-    functions of packages/crypto/src/index.ts.
+  - link/src/keys.ts copies the key pair and Base64URL functions of
+    packages/crypto/src/index.ts.
   - link/src/frames.ts adapts packages/protocol/src/index.ts: the
     control frame and message envelopes, the frame size limits, and
     SecureMessageCodec. It checks frames by hand instead of with zod.
@@ -259,8 +283,9 @@ their ideas; it does not contain their code.
 
 Agent logos (ds-bot/src/client/agent-logos.js)
 The logos name the agent CLI a Bot runs on. Each is a trademark of its owner:
-Claude (Anthropic), Cursor (Anysphere), Gemini (Google), OpenCode (SST),
+Claude (Anthropic), Cursor (Anysphere), Gemini and Antigravity (Google), OpenCode (SST),
 Cline (Cline Bot Inc.), Qwen (Alibaba Cloud), Devin (Cognition AI),
+GitHub Copilot (GitHub), Kimi (Moonshot AI), MiniMax (MiniMax), Mistral AI (Mistral AI),
 OpenAI (OpenAI). DS Bot is not affiliated with or endorsed by these owners.
 Vector marks from Simple Icons (https://simpleicons.org), CC0-1.0.
-Devin and OpenAI marks from the vendors' application icons.
+Devin, OpenAI and Antigravity marks from the vendors' application icons.
